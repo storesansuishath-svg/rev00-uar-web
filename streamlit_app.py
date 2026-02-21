@@ -67,7 +67,7 @@ with tab1:
             input_date = st.date_input("วันที่ (日付)", date.today())
             input_uar = st.text_input("หมายเลข UAR/PAR* (番号)")
             input_cust = st.text_input("ลูกค้า (顧客)")
-            input_score = st.number_input("คะแนน (スコา / スコア)", 0, 100, 0)
+            input_score = st.number_input("คะแนน (スコア)", 0, 100, 0)
         with col2:
             input_prob = st.text_input("ปัญหา* (問題)")
             input_detail = st.text_area("รายละเอียดปัญหา (詳細)")
