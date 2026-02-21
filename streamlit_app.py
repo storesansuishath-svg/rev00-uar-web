@@ -30,11 +30,11 @@ def get_worksheet():
     sh = gc.open_by_url(SHEET_URL)
     return sh.sheet1
 
-@st.cache_data(ttl=5) # รีเฟรชทุก 5 วินาที
+@st.cache_data(ttl=5)
 def load_data_df():
     ws = get_worksheet()
     all_values = ws.get_all_values()
-    # กำหนดหัวตาราง 10 คอลัมน์ (ไทย/Eng/ญี่ปุ่น)
+    # กำหนดหัวตาราง 10 คอลัมน์ (ไทย / English / 日本語)
     headers = [
         "ลำดับที่\nNo. / 番号", "วันที่\nDate / 日付", "หมายเลข UAR/PAR\nNo. / UAR/PAR番号",
         "ลูกค้า\nCustomer / 顧客", "ปัญหา\nProblem / 問題", "รายละเอียด\nDetail / 詳細",
@@ -42,7 +42,7 @@ def load_data_df():
         "คะแนน\nScore / スコア", "ไฟล์ PDF\nPDF / PDFファイル"
     ]
     if len(all_values) > 2:
-        data = all_values[2:] # ข้ามแถวหัวตารางเดิมใน Sheet
+        data = all_values[2:] 
         return pd.DataFrame(data, columns=headers)
     return pd.DataFrame(columns=headers)
 
@@ -51,7 +51,6 @@ def upload_to_drive(file, filename):
     file_metadata = {'name': filename, 'parents': [DRIVE_FOLDER_ID]}
     media = MediaIoBaseUpload(io.BytesIO(file.getvalue()), mimetype='application/pdf')
     uploaded_file = drive_service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
-    # เปิดสิทธิ์ Public ให้คนมีลิ้งค์กดดูได้
     drive_service.permissions().create(fileId=uploaded_file.get('id'), body={'type': 'anyone', 'role': 'viewer'}).execute()
     return uploaded_file.get('webViewLink')
 
@@ -79,12 +78,15 @@ with tab1:
             input_date = st.date_input("วันที่ (日付)", date.today())
             input_uar = st.text_input("หมายเลข UAR/PAR* (番号)")
             input_cust = st.text_input("ลูกค้า (顧客)")
-            input_score = st.number_input("คะแนน (スコア)", 0, 100, 0)
+            # --- แก้ไขเป็นช่องให้คีย์คะแนนเอง ---
+            input_score = st.text_input("คะแนน (スコア)", placeholder="พิมพ์คะแนนที่นี่...")
+            
         with col2:
             input_prob = st.text_input("ปัญหา* (問題)")
             input_detail = st.text_area("รายละเอียดปัญหา (詳細)")
             input_job_code = st.text_input("รหัสงาน (ジョブコード)")
             input_job_name = st.text_input("ชื่องาน (ジョブ名)")
+            # --- ช่องอัพโหลด PDF พร้อมเครื่องหมาย + ---
             input_pdf = st.file_uploader("อัพโหลด PDF (PDFアップロード) +", type=["pdf"])
         
         submitted = st.form_submit_button("💾 บันทึกข้อมูล (保存)")
@@ -106,10 +108,10 @@ with tab1:
                     ]
                     get_worksheet().append_row(row_data)
                     
-                    # ส่ง LINE
+                    # ส่ง LINE Notify
                     send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nลูกค้า: {input_cust}\nคะแนน: {input_score}")
                     
-                    st.success("บันทึกสำเร็จ!")
+                    st.success("บันทึกสำเร็จ! (保存完了)")
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
@@ -117,27 +119,20 @@ with tab1:
 
 with tab2:
     st.header("ฐานข้อมูล UAR ทั้งหมด (データベース)")
-    # --- ช่องค้นหาที่กลับมาแล้ว! ---
-    search_query = st.text_input("🔍 พิมพ์คำที่ต้องการค้นหา (ลูกค้า, เลข UAR, ปัญหา, รหัสงาน)...")
+    
+    # --- ระบบค้นหาคีย์เวิร์ดกลับมาแล้วครับ ---
+    search_query = st.text_input("🔍 ค้นหาคีย์เวิร์ด (ลูกค้า, เลข UAR, ปัญหา, รหัสงาน)...")
     
     if not df.empty:
-        # ตรรกะการค้นหา
         if search_query:
-            # ค้นหาทุกคอลัมน์โดยไม่สนตัวพิมพ์เล็ก-ใหญ่
+            # ค้นหาคำในทุกคอลัมน์
             mask = df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)
             display_df = df[mask]
         else:
-            # ถ้าไม่ค้นหา ให้เรียงลำดับล่าสุดขึ้นก่อน
+            # เรียงลำดับล่าสุดขึ้นก่อน
             display_df = df.sort_index(ascending=False)
             
         st.dataframe(
             display_df, 
             use_container_width=True, 
-            hide_index=True,
-            column_config={
-                "ไฟล์ PDF\nPDF / PDFファイル": st.column_config.LinkColumn("เปิดไฟล์ PDF (開く)")
-            }
-        )
-        st.caption(f"แสดงข้อมูลทั้งหมด {len(display_df)} รายการ")
-    else:
-        st.info("ยังไม่มีข้อมูลในระบบ")
+            hide_
