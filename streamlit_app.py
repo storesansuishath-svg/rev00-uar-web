@@ -135,4 +135,11 @@ with tab2:
         st.dataframe(
             display_df, 
             use_container_width=True, 
-            hide_
+            hide_index=True,
+            column_config={
+                "ไฟล์ PDF\nPDF / PDFファイル": st.column_config.LinkColumn("เปิดไฟล์ (開く)")
+            }
+        )
+        st.caption(f"พบข้อมูลทั้งหมด {len(display_df)} รายการ")
+    else:
+        st.info("ยังไม่มีข้อมูลในระบบ")
