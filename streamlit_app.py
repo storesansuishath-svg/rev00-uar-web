@@ -9,7 +9,6 @@ st.set_page_config(page_title="REV.00 รวม UAR System", layout="wide")
 st.title("📂 ระบบ REV.00 รวม UAR")
 
 # --- 1. ตั้งค่าการเชื่อมต่อ Google Sheets ---
-# ใช้ cache_resource สำหรับการเชื่อมต่อหลัก (ไม่ตายบ่อย)
 @st.cache_resource
 def get_gs_client():
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -20,17 +19,24 @@ def get_gs_client():
 gc = get_gs_client()
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1iY8d-oyCf0lGZiLQZzJ0C_IbPRABzIb_nM2ChIxFg-M/edit"
 
-# ฟังก์ชันดึง Worksheet แบบสดๆ (ไม่ใช้ Cache)
 def get_worksheet():
     sh = gc.open_by_url(SHEET_URL)
     return sh.sheet1
 
-# ฟังก์ชันดึง Data (ใช้ Cache เพื่อความเร็ว)
 @st.cache_data(ttl=10)
 def load_data_df():
     ws = get_worksheet()
-    data = ws.get_all_records()
-    return pd.DataFrame(data)
+    # ดึงข้อมูลทั้งหมดเป็น List ของ List
+    all_values = ws.get_all_values()
+    
+    if len(all_values) > 1:
+        # ใช้แถวที่ 2 (index 1) ซึ่งเป็นภาษาไทย เป็นหัวตาราง
+        headers = all_values[1] 
+        # ข้อมูลจริงเริ่มตั้งแต่แถวที่ 3 (index 2) เป็นต้นไป
+        data = all_values[2:] 
+        return pd.DataFrame(data, columns=headers)
+    else:
+        return pd.DataFrame()
 
 # --- 2. ฟังก์ชันส่ง LINE ---
 def send_line_notify(message):
@@ -38,7 +44,6 @@ def send_line_notify(message):
     url = 'https://notify-api.line.me/api/notify'
     headers = {'Authorization': f'Bearer {token}'}
     data = {'message': message}
-    # ตรวจสอบว่าส่งสำเร็จไหม
     response = requests.post(url, headers=headers, data=data)
     return response.status_code
 
@@ -51,10 +56,12 @@ with tab1:
     with st.form("entry_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
+            # รันเลขลำดับโดยเช็คจากคอลัมน์ "ลำดับที่"
             next_no = 1
-            if not df.empty and "No." in df.columns:
-                df['No.'] = pd.to_numeric(df['No.'], errors='coerce')
-                next_no = int(df["No."].max(skipna=True)) + 1 if pd.notna(df["No."].max(skipna=True)) else 1
+            if not df.empty and "ลำดับที่" in df.columns:
+                col_no = pd.to_numeric(df["ลำดับที่"], errors='coerce')
+                next_no = int(col_no.max()) + 1 if not col_no.dropna().empty else 1
+            
             st.info(f"ลำดับที่ (Auto): {next_no}")
             input_date = st.date_input("วันที่", date.today())
             input_uar = st.text_input("หมายเลข UAR/PAR*")
@@ -72,34 +79,34 @@ with tab1:
                 st.error("กรุณากรอกข้อมูลที่จำเป็น (*) ให้ครบถ้วน")
             else:
                 try:
-                    # ดึง Worksheet สดๆ มาเขียน
                     ws_to_write = get_worksheet()
+                    # เตรียมข้อมูลให้ตรงกับหัวตารางใน Sheet (8 คอลัมน์)
                     row_data = [
-                        next_no, input_date.strftime("%d/%m/%Y"), input_uar, 
-                        input_cust, input_prob, input_detail, input_job_code, input_job_name
+                        next_no, 
+                        input_date.strftime("%d/%m/%Y"), 
+                        input_uar, 
+                        input_cust, 
+                        input_prob, 
+                        input_detail, 
+                        input_job_code, 
+                        input_job_name
                     ]
                     ws_to_write.append_row(row_data)
                     
-                    # แจ้งเตือน LINE
-                    msg = f"\n🔔 แจ้ง UAR ใหม่!\nเลขที่: {input_uar}\nลูกค้า: {input_cust}\nปัญหา: {input_prob}"
-                    status = send_line_notify(msg)
+                    msg = f"\n🔔 แจ้ง UAR ใหม่!\nลำดับ: {next_no}\nเลขที่: {input_uar}\nลูกค้า: {input_cust}\nปัญหา: {input_prob}"
+                    send_line_notify(msg)
                     
                     st.success(f"บันทึกข้อมูล {input_uar} สำเร็จ!")
-                    if status != 200:
-                        st.warning("⚠️ บันทึกเข้า Sheet สำเร็จ แต่ส่ง LINE ไม่ได้ (ตรวจสอบ Token)")
-                    
-                    st.cache_data.clear() # ล้างแคชเพื่อให้ตารางอัปเดต
+                    st.cache_data.clear() 
+                    st.rerun() # รีโหลดหน้าเพื่ออัปเดตเลขลำดับใหม่ทันที
                 except Exception as e:
                     st.error(f"เกิดข้อผิดพลาด: {e}")
 
 with tab2:
     st.header("ฐานข้อมูล UAR ทั้งหมด")
-    search_query = st.text_input("🔍 พิมพ์คีย์เวิร์ดที่ต้องการค้นหา...")
+    search_query = st.text_input("🔍 พิมพ์คีย์เวิร์ดเพื่อค้นหา (เช่น ชื่อลูกค้า, เลข UAR, ปัญหา)...")
     if not df.empty:
         if search_query:
+            # ค้นหาคำในทุกคอลัมน์
             mask = df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)
-            st.dataframe(df[mask], use_container_width=True)
-        else:
-            st.dataframe(df.sort_values(by="No.", ascending=False), use_container_width=True)
-    else:
-        st.info("ไม่พบข้อมูลในระบบ")
+            st.dataframe(df[mask], use_container_width=True, hide_index=True)
