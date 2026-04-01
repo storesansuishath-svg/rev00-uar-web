@@ -34,12 +34,12 @@ def get_worksheet():
 def load_data_df():
     ws = get_worksheet()
     all_values = ws.get_all_values()
-    # กำหนดหัวตาราง 10 คอลัมน์ (ไทย / English / 日本語)
+    # กำหนดหัวตาราง 11 คอลัมน์ (เพิ่ม แผนก / Section)
     headers = [
         "ลำดับที่\nNo. / 番号", "วันที่\nDate / 日付", "หมายเลข UAR/PAR\nNo. / UAR/PAR番号",
-        "ลูกค้า\nCustomer / 顧客", "ปัญหา\nProblem / 問題", "รายละเอียด\nDetail / 詳細",
-        "รหัสงาน\nJob Code / ジョブコード", "ชื่องาน\nJob Name / ジョブ名",
-        "คะแนน\nScore / スコア", "ไฟล์ PDF\nPDF / PDFファイル"
+        "ลูกค้า\nCustomer / 顧客", "แผนก\nSection / 部署", "ปัญหา\nProblem / 問題", 
+        "รายละเอียด\nDetail / 詳細", "รหัสงาน\nJob Code / ジョブコード", 
+        "ชื่องาน\nJob Name / ジョブ名", "คะแนน\nScore / スコア", "ไฟล์ PDF\nPDF / PDFファイル"
     ]
     if len(all_values) > 2:
         data = all_values[2:] 
@@ -78,15 +78,16 @@ with tab1:
             input_date = st.date_input("วันที่ (日付)", date.today())
             input_uar = st.text_input("หมายเลข UAR/PAR* (番号)")
             input_cust = st.text_input("ลูกค้า (顧客)")
-            # --- แก้ไขเป็นช่องให้คีย์คะแนนเอง ---
-            input_score = st.text_input("คะแนน (スコア)", placeholder="พิมพ์คะแนนที่นี่...")
+            # --- เพิ่มช่องแผนก ---
+            input_section = st.text_input("แผนก (Section / 部署)")
+            # --- ช่องคะแนนแบบคีย์เอง ---
+            input_score = st.text_input("คะแนน (Score / スコア)")
             
         with col2:
             input_prob = st.text_input("ปัญหา* (問題)")
             input_detail = st.text_area("รายละเอียดปัญหา (詳細)")
             input_job_code = st.text_input("รหัสงาน (ジョブコード)")
             input_job_name = st.text_input("ชื่องาน (ジョブ名)")
-            # --- ช่องอัพโหลด PDF พร้อมเครื่องหมาย + ---
             input_pdf = st.file_uploader("อัพโหลด PDF (PDFアップロード) +", type=["pdf"])
         
         submitted = st.form_submit_button("💾 บันทึกข้อมูล (保存)")
@@ -101,15 +102,16 @@ with tab1:
                         with st.spinner('กำลังอัพโหลดไฟล์ PDF...'):
                             pdf_link = upload_to_drive(input_pdf, f"UAR_{input_uar}_{date.today()}.pdf")
                     
+                    # เรียงข้อมูล 11 ช่องให้ตรงกับ Sheet
                     row_data = [
                         next_no, input_date.strftime("%d/%m/%Y"), input_uar, 
-                        input_cust, input_prob, input_detail, input_job_code, 
-                        input_job_name, input_score, pdf_link
+                        input_cust, input_section, input_prob, input_detail, 
+                        input_job_code, input_job_name, input_score, pdf_link
                     ]
                     get_worksheet().append_row(row_data)
                     
                     # ส่ง LINE Notify
-                    send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nลูกค้า: {input_cust}\nคะแนน: {input_score}")
+                    send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nแผนก: {input_section}\nคะแนน: {input_score}")
                     
                     st.success("บันทึกสำเร็จ! (保存完了)")
                     st.cache_data.clear()
@@ -120,16 +122,14 @@ with tab1:
 with tab2:
     st.header("ฐานข้อมูล UAR ทั้งหมด (データベース)")
     
-    # --- ระบบค้นหาคีย์เวิร์ดกลับมาแล้วครับ ---
-    search_query = st.text_input("🔍 ค้นหาคีย์เวิร์ด (ลูกค้า, เลข UAR, ปัญหา, รหัสงาน)...")
+    # ระบบค้นหาคีย์เวิร์ด (ค้นหาแผนกได้ด้วย)
+    search_query = st.text_input("🔍 ค้นหา (ลูกค้า, แผนก, เลข UAR, ปัญหา)...")
     
     if not df.empty:
         if search_query:
-            # ค้นหาคำในทุกคอลัมน์
             mask = df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)
             display_df = df[mask]
         else:
-            # เรียงลำดับล่าสุดขึ้นก่อน
             display_df = df.sort_index(ascending=False)
             
         st.dataframe(
