@@ -34,16 +34,20 @@ def get_worksheet():
 def load_data_df():
     ws = get_worksheet()
     all_values = ws.get_all_values()
-    # หัวตาราง 12 คอลัมน์
     headers = [
         "ลำดับที่\nNo. / 番号", "วันที่\nDate / 日付", "หมายเลข UAR/PAR\nNo. / UAR/PAR番号",
         "ลูกค้า\nCustomer / 顧客", "แผนก\nSection / 部署", "รุ่น\nModel / モデル",
         "ปัญหา\nProblem / 問題", "รายละเอียด\nDetail / 詳細", "รหัสงาน\nJob Code / ジョブコード", 
         "ชื่องาน\nJob Name / ジョブ名", "คะแนน\nScore / スコア", "ไฟล์ PDF\nPDF / PDFファイル"
     ]
+    
     if len(all_values) > 2:
-        data = all_values[2:] 
-        return pd.DataFrame(data, columns=headers)
+        raw_data = all_values[2:] 
+        processed_data = []
+        for row in raw_data:
+            padded_row = row + [""] * (len(headers) - len(row))
+            processed_data.append(padded_row[:len(headers)])
+        return pd.DataFrame(processed_data, columns=headers)
     return pd.DataFrame(columns=headers)
 
 # --- 2. ฟังก์ชันเสริม (PDF & LINE) ---
@@ -61,9 +65,69 @@ def send_line_notify(message):
 
 # --- 3. หน้าจอการทำงาน ---
 df = load_data_df()
-tab1, tab2 = st.tabs(["📝 บันทึกข้อมูล (入力)", "🔍 ค้นหาข้อมูล (検索)"])
 
+# เพิ่มแท็บใหม่ "แดชบอร์ด" ไว้เป็นหน้าแรก
+tab1, tab2, tab3 = st.tabs(["📊 แดชบอร์ด (Dashboard)", "📝 บันทึกข้อมูล (入力)", "🔍 ค้นหาข้อมูล (検索)"])
+
+# ==========================================
+# TAB 1: แดชบอร์ด (Dashboard)
+# ==========================================
 with tab1:
+    st.header("📊 แดชบอร์ดสรุปผล (เดือนล่าสุด)")
+    
+    df_dash = df.copy()
+    if not df_dash.empty:
+        # แปลงวันที่เพื่อหาเดือนล่าสุด
+        df_dash['Date_Parsed'] = pd.to_datetime(df_dash['วันที่\nDate / 日付'], format='%d/%m/%Y', errors='coerce')
+        # แปลงคะแนนเป็นตัวเลข (ถ้าว่างให้เป็น 0)
+        df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / スコア'], errors='coerce').fillna(0)
+        
+        valid_dates = df_dash['Date_Parsed'].dropna()
+        if not valid_dates.empty:
+            latest_date = valid_dates.max()
+            latest_month = latest_date.month
+            latest_year = latest_date.year
+            
+            # กรองเอาเฉพาะข้อมูลของเดือนล่าสุด
+            df_latest = df_dash[(df_dash['Date_Parsed'].dt.month == latest_month) & 
+                                (df_dash['Date_Parsed'].dt.year == latest_year)]
+            
+            st.markdown(f"**ข้อมูลประจำเดือน:** {latest_date.strftime('%m/%Y')} (จำนวนเคสทั้งหมด: {len(df_latest)})")
+            
+            # --- ส่วนที่ 1: การ์ดใหญ่ (Combine) ---
+            st.markdown("### 🌾 รุ่น Combine (รวมคะแนนแยกตามแผนก)")
+            combine_df = df_latest[df_latest['รุ่น\nModel / モデル'] == 'Combine']
+            
+            sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
+            # สร้างการ์ด 6 ช่องเรียงกัน
+            cols = st.columns(len(sections))
+            for i, sec in enumerate(sections):
+                # รวมคะแนนของแผนกนั้นๆ
+                score_sum = combine_df[combine_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
+                cols[i].metric(label=sec, value=f"{int(score_sum)}")
+            
+            st.divider() # เส้นคั่น
+            
+            # --- ส่วนที่ 2: การ์ดเล็ก (Tractor, Rotary, Other) ---
+            st.markdown("### 🚜 รุ่นอื่นๆ (รวมคะแนน)")
+            cols_small = st.columns(3)
+            
+            models_small = ["Tractor", "Rotary", "Other"]
+            icons = ["🚜 Tractor", "🔄 Rotary", "⚙️ Other"]
+            
+            for i, mod in enumerate(models_small):
+                score_sum = df_latest[df_latest['รุ่น\nModel / モデル'] == mod]['Score_Num'].sum()
+                cols_small[i].metric(label=icons[i], value=f"{int(score_sum)}")
+                
+        else:
+            st.info("ยังไม่มีข้อมูลวันที่ที่ถูกต้องในระบบ (รูปแบบที่รองรับ: วว/ดด/ปปปป)")
+    else:
+        st.info("ยังไม่มีข้อมูลในระบบ")
+
+# ==========================================
+# TAB 2: บันทึกข้อมูล
+# ==========================================
+with tab2:
     st.header("บันทึก UAR/PAR ใหม่ (新規登録)")
     with st.form("entry_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
@@ -77,12 +141,11 @@ with tab1:
             input_date = st.date_input("วันที่ (日付)", date.today())
             input_uar = st.text_input("หมายเลข UAR/PAR* (番号)")
             input_cust = st.text_input("ลูกค้า (顧客)")
-            # --- เปลี่ยนเป็นรายการเลือกแผนกตามที่ระบุมา ---
             input_section = st.selectbox("แผนก (Section / 部署)", ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"])
             input_model = st.selectbox("รุ่น (Model / モデル)", ["Combine", "Tractor", "Rotary", "Other"])
             
         with col2:
-            input_score = st.text_input("คะแนน (Score / スコア)")
+            input_score = st.text_input("คะแนน (Score / スコア)", value="0") # ตั้งค่าเริ่มต้นเป็น 0
             input_prob = st.text_input("ปัญหา* (問題)")
             input_detail = st.text_area("รายละเอียดปัญหา (詳細)")
             input_job_code = st.text_input("รหัสงาน (ジョブコード)")
@@ -108,7 +171,6 @@ with tab1:
                     ]
                     get_worksheet().append_row(row_data)
                     
-                    # ส่ง LINE Notify
                     send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nแผนก: {input_section}\nรุ่น: {input_model}\nคะแนน: {input_score}")
                     
                     st.success("บันทึกข้อมูลเรียบร้อยแล้ว!")
@@ -117,7 +179,10 @@ with tab1:
                 except Exception as e:
                     st.error(f"เกิดข้อผิดพลาด: {e}")
 
-with tab2:
+# ==========================================
+# TAB 3: ค้นหาข้อมูล
+# ==========================================
+with tab3:
     st.header("ฐานข้อมูล UAR ทั้งหมด (データベース)")
     search_query = st.text_input("🔍 ค้นหา (ลูกค้า, แผนก, รุ่น, เลข UAR, ปัญหา)...")
     
