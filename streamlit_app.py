@@ -10,7 +10,7 @@ from datetime import date
 
 # ตั้งค่าหน้าเว็บ
 st.set_page_config(page_title="REV.00 UAR System", layout="wide")
-st.title("📂 ระบบ REV.00 รวม UAR")
+st.title("📂 ระบบ รวม UAR")
 
 # --- 1. การเชื่อมต่อ Google Services ---
 @st.cache_resource
