@@ -224,15 +224,62 @@ with tab2:
                         st.error(f"Error: {e}")
 
 # ==========================================
-# TAB 3: ค้นหาข้อมูล
+# TAB 3: ค้นหาข้อมูล (เพิ่มฟิลเตอร์ & ปุ่มดาวน์โหลด)
 # ==========================================
 with tab3:
     st.header("ฐานข้อมูล UAR ทั้งหมด")
-    search_query = st.text_input("🔍 ค้นหา (ลูกค้า, แผนก, รุ่น, เลข UAR, ปัญหา)...")
+    
     if not df.empty:
+        # แบ่งหน้าจอเป็น 3 คอลัมน์สำหรับกล่องค้นหาและฟิลเตอร์
+        f_col1, f_col2, f_col3 = st.columns(3)
+        with f_col1:
+            search_query = st.text_input("🔍 ค้นหาด้วยข้อความ...")
+        with f_col2:
+            section_list = df['แผนก\nSection / 部署'].dropna().unique().tolist()
+            section_list = [s for s in section_list if str(s).strip() != ""] # กรองช่องว่างออก
+            selected_sections = st.multiselect("🏷️ กรองตามแผนก:", section_list)
+        with f_col3:
+            model_list = df['รุ่น\nModel / モデル'].dropna().unique().tolist()
+            model_list = [m for m in model_list if str(m).strip() != ""] # กรองช่องว่างออก
+            selected_models = st.multiselect("🚜 กรองตามรุ่น:", model_list)
+
+        # ทำการกรองข้อมูลตามฟิลเตอร์ที่เลือก
+        display_df = df.copy()
+        
+        if selected_sections:
+            display_df = display_df[display_df['แผนก\nSection / 部署'].isin(selected_sections)]
+            
+        if selected_models:
+            display_df = display_df[display_df['รุ่น\nModel / モデル'].isin(selected_models)]
+            
         if search_query:
-            mask = df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)
-            display_df = df[mask]
-        else:
-            display_df = df.sort_index(ascending=False)
-        st.dataframe(display_df, use_container_width=True, hide_index=True, column_config={"ไฟล์ PDF\nPDF / PDFファイル": st.column_config.LinkColumn("เปิดไฟล์")})
+            mask = display_df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)
+            display_df = display_df[mask]
+            
+        # เรียงข้อมูลใหม่ล่าสุดขึ้นก่อน
+        display_df = display_df.sort_index(ascending=False)
+        
+        # จัดเลย์เอาต์ปุ่มดาวน์โหลดและจำนวนรายการ
+        d_col1, d_col2 = st.columns([1, 2])
+        with d_col1:
+            st.markdown(f"**จำนวนผลลัพธ์:** {len(display_df)} รายการ")
+        with d_col2:
+            # แปลง DataFrame เป็นไฟล์ CSV (รองรับภาษาไทย/ญี่ปุ่นด้วย utf-8-sig)
+            csv = display_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
+            st.download_button(
+                label="📥 ดาวน์โหลดเป็นไฟล์ Excel (CSV)",
+                data=csv,
+                file_name=f"UAR_Export_{date.today().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+        # แสดงตาราง
+        st.dataframe(
+            display_df, 
+            use_container_width=True, 
+            hide_index=True, 
+            column_config={"ไฟล์ PDF\nPDF / PDFファイル": st.column_config.LinkColumn("เปิดไฟล์")}
+        )
+    else:
+        st.info("ยังไม่มีข้อมูลในระบบ")
