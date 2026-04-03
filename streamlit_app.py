@@ -66,21 +66,30 @@ def send_line_notify(message):
 # --- 3. หน้าจอการทำงาน ---
 df = load_data_df()
 
-tab1, tab2, tab3 = st.tabs(["📊 แดชบอร์ด (Dashboard)", "📝 บันทึกข้อมูล (入力)", "🔍 ค้นหาข้อมูล (検索)"])
+# อัปเดตชื่อแท็บให้ครบ 3 ภาษา
+tab1, tab2, tab3 = st.tabs([
+    "📊 แดชบอร์ด (Dashboard / ダッシュボード)", 
+    "📝 บันทึกข้อมูล (Input / 入力)", 
+    "🔍 ค้นหาข้อมูล (Search / 検索)"
+])
 
 # ==========================================
 # TAB 1: แดชบอร์ด (Dashboard)
 # ==========================================
 with tab1:
-    st.header("📊 แดชบอร์ดสรุปผลคะแนน")
+    st.header("📊 แดชบอร์ดสรุปผลคะแนน (Score Dashboard / スコアダッシュボード)")
     
     df_dash = df.copy()
     if not df_dash.empty:
-        # ปรับการอ่านวันที่ให้ยืดหยุ่นขึ้น (ไม่ล็อค Format)
-        df_dash['Date_Parsed'] = pd.to_datetime(df_dash['วันที่\nDate / 日付'], errors='coerce', dayfirst=True)
+        date_strs = df_dash['วันที่\nDate / 日付'].astype(str).str.strip()
+        
+        # ระบบอ่านวันที่ยืดหยุ่น (ป้องกัน Error วันที่รูปแบบเก่า)
+        df_dash['Date_Parsed'] = pd.to_datetime(date_strs, format='%d/%m/%Y', errors='coerce')
+        df_dash['Date_Parsed'] = df_dash['Date_Parsed'].fillna(pd.to_datetime(date_strs, format='%d-%b-%y', errors='coerce'))
+        df_dash['Date_Parsed'] = df_dash['Date_Parsed'].fillna(pd.to_datetime(date_strs, errors='coerce', dayfirst=True))
+        
         df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / スコア'], errors='coerce').fillna(0)
         
-        # คัดเอาเฉพาะแถวที่ระบบแปลงวันที่สำเร็จ
         valid_dates_df = df_dash.dropna(subset=['Date_Parsed']).copy()
         
         if not valid_dates_df.empty:
@@ -88,13 +97,13 @@ with tab1:
             unique_months = valid_dates_df['Month_Year'].unique()
             unique_months = sorted(unique_months, key=lambda x: pd.to_datetime(x, format='%m/%Y'), reverse=True)
             
-            selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดูข้อมูล:", unique_months)
+            selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดูข้อมูล (Select Month / 月を選択):", unique_months)
             df_filtered = valid_dates_df[valid_dates_df['Month_Year'] == selected_month]
             
-            st.markdown(f"**จำนวน UAR ทั้งหมดในเดือนนี้:** {len(df_filtered)} รายการ")
+            st.markdown(f"**จำนวน UAR ทั้งหมดในเดือนนี้ (Total UAR / 今月のUAR):** {len(df_filtered)} รายการ")
             
             # --- การ์ดใหญ่ (Combine) ---
-            st.markdown("### 🌾 รุ่น Combine (รวมคะแนนแยกตามแผนก)")
+            st.markdown("### 🌾 รุ่น Combine (รวมคะแนนแยกตามแผนก / Score by Section)")
             combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
             sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
             cols = st.columns(len(sections))
@@ -105,7 +114,7 @@ with tab1:
             st.divider()
             
             # --- การ์ดเล็ก (Tractor, Rotary, Other) ---
-            st.markdown("### 🚜 รุ่นอื่นๆ (รวมคะแนน)")
+            st.markdown("### 🚜 รุ่นอื่นๆ (รวมคะแนน / Total Score)")
             cols_small = st.columns(3)
             models_small = ["Tractor", "Rotary", "Other"]
             icons = ["🚜 Tractor", "🔄 Rotary", "⚙️ Other"]
@@ -115,15 +124,15 @@ with tab1:
                 cols_small[i].metric(label=icons[i], value=f"{int(score_sum)}")
                 
         else:
-            st.warning("⚠️ พบข้อมูลในระบบ แต่ระบบอ่านรูปแบบวันที่ไม่ออก (กรุณาตรวจสอบคอลัมน์ 'วันที่' ใน Google Sheet ว่าใส่ข้อมูลครบหรือไม่)")
+            st.warning("⚠️ ไม่สามารถประมวลผลวันที่ได้ (Date Parse Error / 日付エラー)")
     else:
-        st.info("ยังไม่มีข้อมูลในระบบ หรือยังไม่ได้บันทึก UAR แรก")
+        st.info("ยังไม่มีข้อมูลในระบบ (No Data / データなし)")
 
 # ==========================================
 # TAB 2: บันทึกข้อมูล
 # ==========================================
 with tab2:
-    st.header("บันทึก UAR/PAR ใหม่ (新規登録)")
+    st.header("บันทึก UAR/PAR ใหม่ (New Entry / 新規登録)")
     with st.form("entry_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -132,34 +141,31 @@ with tab2:
                 col_no = pd.to_numeric(df.iloc[:, 0], errors='coerce')
                 next_no = int(col_no.max()) + 1 if not col_no.dropna().empty else 1
             
-            st.info(f"ลำดับที่ (Auto): {next_no}")
-            
-            # วันที่แบบมีปฏิทินให้จิ้มเลือก (จะแสดงผลเป็น YYYY/MM/DD บนฟอร์ม แต่จะเซฟเป็น DD/MM/YYYY)
-            input_date = st.date_input("วันที่ (日付)", date.today())
-            
-            input_uar = st.text_input("หมายเลข UAR/PAR* (番号)")
-            input_cust = st.text_input("ลูกค้า (顧客)")
+            st.info(f"ลำดับที่ (Auto / 自動): {next_no}")
+            input_date = st.date_input("วันที่ (Date / 日付)", date.today())
+            input_uar = st.text_input("หมายเลข UAR/PAR* (No. / 番号)")
+            input_cust = st.text_input("ลูกค้า (Customer / 顧客)")
             input_section = st.selectbox("แผนก (Section / 部署)", ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"])
             input_model = st.selectbox("รุ่น (Model / モデル)", ["Combine", "Tractor", "Rotary", "Other"])
             
         with col2:
             input_score = st.text_input("คะแนน (Score / スコア)", value="0")
-            input_prob = st.text_input("ปัญหา* (問題)")
-            input_detail = st.text_area("รายละเอียดปัญหา (詳細)")
-            input_job_code = st.text_input("รหัสงาน (ジョブコード)")
-            input_job_name = st.text_input("ชื่องาน (ジョブ名)")
-            input_pdf = st.file_uploader("อัพโหลด PDF (PDFアップロード) +", type=["pdf"])
+            input_prob = st.text_input("ปัญหา* (Problem / 問題)")
+            input_detail = st.text_area("รายละเอียดปัญหา (Detail / 詳細)")
+            input_job_code = st.text_input("รหัสงาน (Job Code / ジョブコード)")
+            input_job_name = st.text_input("ชื่องาน (Job Name / ジョブ名)")
+            input_pdf = st.file_uploader("อัพโหลด PDF (Upload PDF / PDFアップロード) +", type=["pdf"])
         
-        submitted = st.form_submit_button("💾 บันทึกข้อมูล (保存)")
+        submitted = st.form_submit_button("💾 บันทึกข้อมูล (Save / 保存)")
         
         if submitted:
             if not input_uar or not input_prob:
-                st.error("กรุณากรอกช่องที่มีเครื่องหมาย *")
+                st.error("กรุณากรอกช่องที่มีเครื่องหมาย * (Required fields / 必須項目)")
             else:
                 try:
                     pdf_link = ""
                     if input_pdf:
-                        with st.spinner('กำลังอัพโหลดไฟล์ PDF...'):
+                        with st.spinner('กำลังอัพโหลดไฟล์ PDF (Uploading... / アップロード中...)'):
                             pdf_link = upload_to_drive(input_pdf, f"UAR_{input_uar}_{date.today()}.pdf")
                     
                     row_data = [
@@ -171,18 +177,18 @@ with tab2:
                     
                     send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nแผนก: {input_section}\nรุ่น: {input_model}\nคะแนน: {input_score}")
                     
-                    st.success("บันทึกข้อมูลเรียบร้อยแล้ว!")
+                    st.success("บันทึกข้อมูลเรียบร้อยแล้ว! (Saved Successfully / 保存完了)")
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
-                    st.error(f"เกิดข้อผิดพลาด: {e}")
+                    st.error(f"เกิดข้อผิดพลาด (Error / エラー): {e}")
 
 # ==========================================
 # TAB 3: ค้นหาข้อมูล
 # ==========================================
 with tab3:
-    st.header("ฐานข้อมูล UAR ทั้งหมด (データベース)")
-    search_query = st.text_input("🔍 ค้นหา (ลูกค้า, แผนก, รุ่น, เลข UAR, ปัญหา)...")
+    st.header("ฐานข้อมูล UAR ทั้งหมด (Database / データベース)")
+    search_query = st.text_input("🔍 ค้นหา (Search / 検索) (ลูกค้า, แผนก, รุ่น, เลข UAR, ปัญหา)...")
     
     if not df.empty:
         if search_query:
@@ -196,9 +202,9 @@ with tab3:
             use_container_width=True, 
             hide_index=True,
             column_config={
-                "ไฟล์ PDF\nPDF / PDFファイル": st.column_config.LinkColumn("เปิดไฟล์ (開く)")
+                "ไฟล์ PDF\nPDF / PDFファイル": st.column_config.LinkColumn("เปิดไฟล์ (Open / 開く)")
             }
         )
-        st.caption(f"พบข้อมูลทั้งหมด {len(display_df)} รายการ")
+        st.caption(f"พบข้อมูลทั้งหมด {len(display_df)} รายการ (Items found / 件見つかりました)")
     else:
-        st.info("ยังไม่มีข้อมูลในระบบ")
+        st.info("ยังไม่มีข้อมูลในระบบ (No Data / データなし)")
