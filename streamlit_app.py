@@ -37,7 +37,7 @@ def load_data_df():
     headers = [
         "ลำดับที่\nNo. / 番号", "วันที่\nDate / 日付", "หมายเลข UAR/PAR\nNo. / UAR/PAR番号",
         "ลูกค้า\nCustomer / 顧客", "แผนก\nSection / 部署", "รุ่น\nModel / モデル",
-        "ปัญหา\nProblem / 問題", "รายละเอียด\nDetail / 詳細", "รหัสงาน\nJob Code / ジョブコード", 
+        "ปัญหา\nProblem / 問題", "รายละเอียด\nDetail / 詳細", "รหัสงาน\nJob Code / ジョบコード", 
         "ชื่องาน\nJob Name / ジョブ名", "คะแนน\nScore / スコア", "ไฟล์ PDF\nPDF / PDFファイル"
     ]
     
@@ -81,11 +81,7 @@ with tab1:
     df_dash = df.copy()
     if not df_dash.empty:
         date_strs = df_dash['วันที่\nDate / 日付'].astype(str).str.strip()
-        df_dash['Date_Parsed'] = pd.to_datetime(date_strs, format='%d/%m/%Y', errors='coerce')
-        df_dash['Date_Parsed'] = df_dash['Date_Parsed'].fillna(pd.to_datetime(date_strs, format='%d-%b-%y', errors='coerce'))
-        df_dash['Date_Parsed'] = df_dash['Date_Parsed'].fillna(pd.to_datetime(date_strs, errors='coerce', dayfirst=True))
-        
-        # ปรับให้เป็นตัวเลขทศนิยม (Float)
+        df_dash['Date_Parsed'] = pd.to_datetime(date_strs, errors='coerce', dayfirst=True)
         df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / スコア'], errors='coerce').fillna(0.0)
         
         valid_dates_df = df_dash.dropna(subset=['Date_Parsed']).copy()
@@ -97,26 +93,21 @@ with tab1:
             selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดูข้อมูล (Select Month / 月を選択):", unique_months)
             df_filtered = valid_dates_df[valid_dates_df['Month_Year'] == selected_month]
             
-            st.markdown(f"**จำนวน UAR ทั้งหมดในเดือนนี้:** {len(df_filtered)} รายการ")
             sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
 
-            # --- 🌾 รุ่น Combine (ขนาดใหญ่) ---
+            # --- 🌾 รุ่น Combine ---
             st.subheader("🌾 รุ่น Combine")
             combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
-            # เพิ่มคอลัมน์สำหรับผลรวม (Total) ต่อท้าย
             cols = st.columns(len(sections) + 1)
             for i, sec in enumerate(sections):
                 score_sum = combine_df[combine_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
                 cols[i].metric(label=sec, value=f"{score_sum:.1f}")
-            
-            # ช่องผลรวมสุดท้ายของ Combine
-            combine_total = combine_df['Score_Num'].sum()
-            cols[-1].metric(label="TOTAL", value=f"{combine_total:.1f}", delta="รวมทุกแผนก", delta_color="off")
+            cols[-1].metric(label="TOTAL", value=f"{combine_df['Score_Num'].sum():.1f}")
             
             st.divider()
 
-            # --- 🚜 รุ่น Tractor (ขนาดเล็กลง) ---
-            st.markdown("#### 🚜 รุ่น Tractor (แยกตามแผนก)")
+            # --- 🚜 รุ่น Tractor ---
+            st.markdown("#### 🚜 รุ่น Tractor")
             tractor_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Tractor']
             t_cols = st.columns(len(sections) + 1)
             for i, sec in enumerate(sections):
@@ -126,10 +117,10 @@ with tab1:
             t_cols[-1].caption("**TOTAL**")
             t_cols[-1].markdown(f"### {tractor_df['Score_Num'].sum():.1f}")
 
-            st.write("") # เว้นวรรค
+            st.write("")
 
-            # --- 🔄 รุ่น Rotary (ขนาดเล็กลง) ---
-            st.markdown("#### 🔄 รุ่น Rotary (แยกตามแผนก)")
+            # --- 🔄 รุ่น Rotary ---
+            st.markdown("#### 🔄 รุ่น Rotary")
             rotary_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Rotary']
             r_cols = st.columns(len(sections) + 1)
             for i, sec in enumerate(sections):
@@ -140,78 +131,95 @@ with tab1:
             r_cols[-1].markdown(f"### {rotary_df['Score_Num'].sum():.1f}")
 
             st.divider()
-
-            # --- ⚙️ รุ่น Other (ขนาดปกติ) ---
-            st.markdown("#### ⚙️ รุ่น Other")
             other_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Other']
-            st.metric(label="คะแนนรวมรุ่นอื่นๆ", value=f"{other_df['Score_Num'].sum():.1f}")
-                
-        else:
-            st.warning("⚠️ ไม่พบข้อมูลที่ระบุวันที่ถูกต้อง")
+            st.metric(label="⚙️ รุ่น Other", value=f"{other_df['Score_Num'].sum():.1f}")
     else:
         st.info("ยังไม่มีข้อมูลในระบบ")
 
 # ==========================================
-# TAB 2: บันทึกข้อมูล
+# TAB 2: บันทึกข้อมูล (เพิ่มระบบรหัสผ่าน)
 # ==========================================
 with tab2:
     st.header("บันทึก UAR/PAR ใหม่ (New Entry / 新規登録)")
-    with st.form("entry_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            next_no = 1
-            if not df.empty:
-                col_no = pd.to_numeric(df.iloc[:, 0], errors='coerce')
-                next_no = int(col_no.max()) + 1 if not col_no.dropna().empty else 1
-            
-            st.info(f"ลำดับที่ (Auto / 自動): {next_no}")
-            input_date = st.date_input("วันที่ (Date / 日付)", date.today())
-            input_uar = st.text_input("หมายเลข UAR/PAR* (No. / 番号)")
-            input_cust = st.text_input("ลูกค้า (Customer / 顧客)")
-            input_section = st.selectbox("แผนก (Section / 部署)", ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"])
-            input_model = st.selectbox("รุ่น (Model / モデル)", ["Combine", "Tractor", "Rotary", "Other"])
-            
-        with col2:
-            # ปรับตัวอย่างให้โชว์ทศนิยม
-            input_score = st.text_input("คะแนน (Score / スコア)", value="0.0")
-            input_prob = st.text_input("ปัญหา* (Problem / 問題)")
-            input_detail = st.text_area("รายละเอียดปัญหา (Detail / 詳細)")
-            input_job_code = st.text_input("รหัสงาน (Job Code / ジョブコード)")
-            input_job_name = st.text_input("ชื่องาน (Job Name / ジョブ名)")
-            input_pdf = st.file_uploader("อัพโหลด PDF (Upload PDF / PDFアップロード) +", type=["pdf"])
-        
-        submitted = st.form_submit_button("💾 บันทึกข้อมูล (Save / 保存)")
-        
-        if submitted:
-            if not input_uar or not input_prob:
-                st.error("กรุณากรอกช่องที่มีเครื่องหมาย *")
-            else:
-                try:
-                    pdf_link = ""
-                    if input_pdf:
-                        with st.spinner('กำลังอัพโหลดไฟล์ PDF...'):
-                            pdf_link = upload_to_drive(input_pdf, f"UAR_{input_uar}_{date.today()}.pdf")
-                    
-                    # ตรวจสอบทศนิยมก่อนเซฟ
-                    try:
-                        clean_score = float(input_score)
-                    except:
-                        clean_score = 0.0
 
-                    row_data = [
-                        next_no, input_date.strftime("%d/%m/%Y"), input_uar, 
-                        input_cust, input_section, input_model, input_prob, 
-                        input_detail, input_job_code, input_job_name, f"{clean_score:.1f}", pdf_link
-                    ]
-                    get_worksheet().append_row(row_data)
-                    
-                    send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nแผนก: {input_section}\nรุ่น: {input_model}\nคะแนน: {clean_score:.1f}")
-                    
-                    st.success("บันทึกข้อมูลเรียบร้อยแล้ว!")
-                    st.cache_data.clear()
+    # ระบบตรวจสอบรหัสผ่าน
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if not st.session_state["authenticated"]:
+        # ส่วนหน้าจอป้อนรหัสผ่าน
+        with st.container():
+            st.warning("🔐 พื้นที่จำกัดเฉพาะเจ้าหน้าที่ (Restricted Area / 制限พื้นที่)")
+            pwd_input = st.text_input("กรุณาใส่รหัสผ่านเพื่อบันทึกข้อมูล (Enter Password / パスワードを入力):", type="password")
+            if st.button("ยืนยันรหัสผ่าน (Login / ログイン)"):
+                if pwd_input == "S1234s":
+                    st.session_state["authenticated"] = True
                     st.rerun()
-                except Exception as e:
-                    st.error(f"เกิดข้อผิดพลาด: {e}")
+                else:
+                    st.error("รหัสผ่านไม่ถูกต้อง (Incorrect Password / パスワードが違います)")
+    else:
+        # ปุ่มออกจากระบบ
+        if st.button("🔒 ออกจากระบบ (Logout / ログアウト)"):
+            st.session_state["authenticated"] = False
+            st.rerun()
+            
+        st.divider()
+        
+        # ฟอร์มบันทึกข้อมูลเดิม
+        with st.form("entry_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                next_no = 1
+                if not df.empty:
+                    col_no = pd.to_numeric(df.iloc[:, 0], errors='coerce')
+                    next_no = int(col_no.max()) + 1 if not col_no.dropna().empty else 1
+                
+                st.info(f"ลำดับที่ (Auto / 自動): {next_no}")
+                input_date = st.date_input("วันที่ (Date / 日付)", date.today())
+                input_uar = st.text_input("หมายเลข UAR/PAR* (No. / 番号)")
+                input_cust = st.text_input("ลูกค้า (Customer / 顧客)")
+                input_section = st.selectbox("แผนก (Section / 部署)", ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"])
+                input_model = st.selectbox("รุ่น (Model / モデル)", ["Combine", "Tractor", "Rotary", "Other"])
+                
+            with col2:
+                input_score = st.text_input("คะแนน (Score / スコア)", value="0.0")
+                input_prob = st.text_input("ปัญหา* (Problem / 問題)")
+                input_detail = st.text_area("รายละเอียดปัญหา (Detail / 詳細)")
+                input_job_code = st.text_input("รหัสงาน (Job Code / ジョブコード)")
+                input_job_name = st.text_input("ชื่องาน (Job Name / ジョブ名)")
+                input_pdf = st.file_uploader("อัพโหลด PDF (Upload PDF / PDFアップロード) +", type=["pdf"])
+            
+            submitted = st.form_submit_button("💾 บันทึกข้อมูล (Save / 保存)")
+            
+            if submitted:
+                if not input_uar or not input_prob:
+                    st.error("กรุณากรอกช่องที่มีเครื่องหมาย *")
+                else:
+                    try:
+                        pdf_link = ""
+                        if input_pdf:
+                            with st.spinner('กำลังอัพโหลดไฟล์ PDF...'):
+                                pdf_link = upload_to_drive(input_pdf, f"UAR_{input_uar}_{date.today()}.pdf")
+                        
+                        try:
+                            clean_score = float(input_score)
+                        except:
+                            clean_score = 0.0
+
+                        row_data = [
+                            next_no, input_date.strftime("%d/%m/%Y"), input_uar, 
+                            input_cust, input_section, input_model, input_prob, 
+                            input_detail, input_job_code, input_job_name, f"{clean_score:.1f}", pdf_link
+                        ]
+                        get_worksheet().append_row(row_data)
+                        
+                        send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nแผนก: {input_section}\nรุ่น: {input_model}\nคะแนน: {clean_score:.1f}")
+                        
+                        st.success("บันทึกข้อมูลเรียบร้อยแล้ว!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"เกิดข้อผิดพลาด: {e}")
 
 # ==========================================
 # TAB 3: ค้นหาข้อมูล
