@@ -66,43 +66,46 @@ def send_line_notify(message):
 # --- 3. หน้าจอการทำงาน ---
 df = load_data_df()
 
-# เพิ่มแท็บใหม่ "แดชบอร์ด" ไว้เป็นหน้าแรก
 tab1, tab2, tab3 = st.tabs(["📊 แดชบอร์ด (Dashboard)", "📝 บันทึกข้อมูล (入力)", "🔍 ค้นหาข้อมูล (検索)"])
 
 # ==========================================
 # TAB 1: แดชบอร์ด (Dashboard)
 # ==========================================
 with tab1:
-    st.header("📊 แดชบอร์ดสรุปผล (เดือนล่าสุด)")
+    st.header("📊 แดชบอร์ดสรุปผลคะแนน")
     
     df_dash = df.copy()
     if not df_dash.empty:
-        # แปลงวันที่เพื่อหาเดือนล่าสุด
+        # แปลงวันที่เพื่อนำมาสร้างตัวกรองเดือน
         df_dash['Date_Parsed'] = pd.to_datetime(df_dash['วันที่\nDate / 日付'], format='%d/%m/%Y', errors='coerce')
-        # แปลงคะแนนเป็นตัวเลข (ถ้าว่างให้เป็น 0)
         df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / スコア'], errors='coerce').fillna(0)
         
-        valid_dates = df_dash['Date_Parsed'].dropna()
-        if not valid_dates.empty:
-            latest_date = valid_dates.max()
-            latest_month = latest_date.month
-            latest_year = latest_date.year
+        # คัดกรองเฉพาะแถวที่มีวันที่ถูกต้อง
+        valid_dates_df = df_dash.dropna(subset=['Date_Parsed']).copy()
+        
+        if not valid_dates_df.empty:
+            # สร้างคอลัมน์ เดือน/ปี (เช่น 04/2026) เพื่อใช้เป็นตัวเลือก
+            valid_dates_df['Month_Year'] = valid_dates_df['Date_Parsed'].dt.strftime('%m/%Y')
             
-            # กรองเอาเฉพาะข้อมูลของเดือนล่าสุด
-            df_latest = df_dash[(df_dash['Date_Parsed'].dt.month == latest_month) & 
-                                (df_dash['Date_Parsed'].dt.year == latest_year)]
+            # ดึงรายการเดือนทั้งหมดที่มีในระบบมาเรียงลำดับจากใหม่ไปเก่า
+            unique_months = valid_dates_df['Month_Year'].unique()
+            unique_months = sorted(unique_months, key=lambda x: pd.to_datetime(x, format='%m/%Y'), reverse=True)
             
-            st.markdown(f"**ข้อมูลประจำเดือน:** {latest_date.strftime('%m/%Y')} (จำนวนเคสทั้งหมด: {len(df_latest)})")
+            # --- กล่องเลือกเดือน ---
+            selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดูข้อมูล:", unique_months)
+            
+            # กรองข้อมูลให้เหลือเฉพาะเดือนที่เลือก
+            df_filtered = valid_dates_df[valid_dates_df['Month_Year'] == selected_month]
+            
+            st.markdown(f"**จำนวน UAR ทั้งหมดในเดือนนี้:** {len(df_filtered)} รายการ")
             
             # --- ส่วนที่ 1: การ์ดใหญ่ (Combine) ---
             st.markdown("### 🌾 รุ่น Combine (รวมคะแนนแยกตามแผนก)")
-            combine_df = df_latest[df_latest['รุ่น\nModel / モデル'] == 'Combine']
+            combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
             
             sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
-            # สร้างการ์ด 6 ช่องเรียงกัน
             cols = st.columns(len(sections))
             for i, sec in enumerate(sections):
-                # รวมคะแนนของแผนกนั้นๆ
                 score_sum = combine_df[combine_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
                 cols[i].metric(label=sec, value=f"{int(score_sum)}")
             
@@ -116,7 +119,7 @@ with tab1:
             icons = ["🚜 Tractor", "🔄 Rotary", "⚙️ Other"]
             
             for i, mod in enumerate(models_small):
-                score_sum = df_latest[df_latest['รุ่น\nModel / モデル'] == mod]['Score_Num'].sum()
+                score_sum = df_filtered[df_filtered['รุ่น\nModel / モデル'] == mod]['Score_Num'].sum()
                 cols_small[i].metric(label=icons[i], value=f"{int(score_sum)}")
                 
         else:
@@ -138,14 +141,17 @@ with tab2:
                 next_no = int(col_no.max()) + 1 if not col_no.dropna().empty else 1
             
             st.info(f"ลำดับที่ (Auto): {next_no}")
+            
+            # ช่องนี้จะมีปฏิทินให้คลิกเลือกอยู่แล้วครับ
             input_date = st.date_input("วันที่ (日付)", date.today())
+            
             input_uar = st.text_input("หมายเลข UAR/PAR* (番号)")
             input_cust = st.text_input("ลูกค้า (顧客)")
             input_section = st.selectbox("แผนก (Section / 部署)", ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"])
             input_model = st.selectbox("รุ่น (Model / モデル)", ["Combine", "Tractor", "Rotary", "Other"])
             
         with col2:
-            input_score = st.text_input("คะแนน (Score / スコア)", value="0") # ตั้งค่าเริ่มต้นเป็น 0
+            input_score = st.text_input("คะแนน (Score / スコア)", value="0")
             input_prob = st.text_input("ปัญหา* (問題)")
             input_detail = st.text_area("รายละเอียดปัญหา (詳細)")
             input_job_code = st.text_input("รหัสงาน (ジョブコード)")
