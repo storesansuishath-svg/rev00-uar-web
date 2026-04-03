@@ -66,7 +66,6 @@ def send_line_notify(message):
 # --- 3. หน้าจอการทำงาน ---
 df = load_data_df()
 
-# อัปเดตชื่อแท็บให้ครบ 3 ภาษา
 tab1, tab2, tab3 = st.tabs([
     "📊 แดชบอร์ด (Dashboard / ダッシュボード)", 
     "📝 บันทึกข้อมูล (Input / 入力)", 
@@ -82,51 +81,75 @@ with tab1:
     df_dash = df.copy()
     if not df_dash.empty:
         date_strs = df_dash['วันที่\nDate / 日付'].astype(str).str.strip()
-        
-        # ระบบอ่านวันที่ยืดหยุ่น (ป้องกัน Error วันที่รูปแบบเก่า)
         df_dash['Date_Parsed'] = pd.to_datetime(date_strs, format='%d/%m/%Y', errors='coerce')
         df_dash['Date_Parsed'] = df_dash['Date_Parsed'].fillna(pd.to_datetime(date_strs, format='%d-%b-%y', errors='coerce'))
         df_dash['Date_Parsed'] = df_dash['Date_Parsed'].fillna(pd.to_datetime(date_strs, errors='coerce', dayfirst=True))
         
-        df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / スコア'], errors='coerce').fillna(0)
+        # ปรับให้เป็นตัวเลขทศนิยม (Float)
+        df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / スコア'], errors='coerce').fillna(0.0)
         
         valid_dates_df = df_dash.dropna(subset=['Date_Parsed']).copy()
         
         if not valid_dates_df.empty:
             valid_dates_df['Month_Year'] = valid_dates_df['Date_Parsed'].dt.strftime('%m/%Y')
-            unique_months = valid_dates_df['Month_Year'].unique()
-            unique_months = sorted(unique_months, key=lambda x: pd.to_datetime(x, format='%m/%Y'), reverse=True)
+            unique_months = sorted(valid_dates_df['Month_Year'].unique(), key=lambda x: pd.to_datetime(x, format='%m/%Y'), reverse=True)
             
             selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดูข้อมูล (Select Month / 月を選択):", unique_months)
             df_filtered = valid_dates_df[valid_dates_df['Month_Year'] == selected_month]
             
-            st.markdown(f"**จำนวน UAR ทั้งหมดในเดือนนี้ (Total UAR / 今月のUAR):** {len(df_filtered)} รายการ")
-            
-            # --- การ์ดใหญ่ (Combine) ---
-            st.markdown("### 🌾 รุ่น Combine (รวมคะแนนแยกตามแผนก / Score by Section)")
-            combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
+            st.markdown(f"**จำนวน UAR ทั้งหมดในเดือนนี้:** {len(df_filtered)} รายการ")
             sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
-            cols = st.columns(len(sections))
+
+            # --- 🌾 รุ่น Combine (ขนาดใหญ่) ---
+            st.subheader("🌾 รุ่น Combine")
+            combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
+            # เพิ่มคอลัมน์สำหรับผลรวม (Total) ต่อท้าย
+            cols = st.columns(len(sections) + 1)
             for i, sec in enumerate(sections):
                 score_sum = combine_df[combine_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
-                cols[i].metric(label=sec, value=f"{int(score_sum)}")
+                cols[i].metric(label=sec, value=f"{score_sum:.1f}")
+            
+            # ช่องผลรวมสุดท้ายของ Combine
+            combine_total = combine_df['Score_Num'].sum()
+            cols[-1].metric(label="TOTAL", value=f"{combine_total:.1f}", delta="รวมทุกแผนก", delta_color="off")
             
             st.divider()
-            
-            # --- การ์ดเล็ก (Tractor, Rotary, Other) ---
-            st.markdown("### 🚜 รุ่นอื่นๆ (รวมคะแนน / Total Score)")
-            cols_small = st.columns(3)
-            models_small = ["Tractor", "Rotary", "Other"]
-            icons = ["🚜 Tractor", "🔄 Rotary", "⚙️ Other"]
-            
-            for i, mod in enumerate(models_small):
-                score_sum = df_filtered[df_filtered['รุ่น\nModel / モデル'] == mod]['Score_Num'].sum()
-                cols_small[i].metric(label=icons[i], value=f"{int(score_sum)}")
+
+            # --- 🚜 รุ่น Tractor (ขนาดเล็กลง) ---
+            st.markdown("#### 🚜 รุ่น Tractor (แยกตามแผนก)")
+            tractor_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Tractor']
+            t_cols = st.columns(len(sections) + 1)
+            for i, sec in enumerate(sections):
+                s = tractor_df[tractor_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
+                t_cols[i].caption(f"**{sec}**")
+                t_cols[i].markdown(f"### {s:.1f}")
+            t_cols[-1].caption("**TOTAL**")
+            t_cols[-1].markdown(f"### {tractor_df['Score_Num'].sum():.1f}")
+
+            st.write("") # เว้นวรรค
+
+            # --- 🔄 รุ่น Rotary (ขนาดเล็กลง) ---
+            st.markdown("#### 🔄 รุ่น Rotary (แยกตามแผนก)")
+            rotary_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Rotary']
+            r_cols = st.columns(len(sections) + 1)
+            for i, sec in enumerate(sections):
+                s = rotary_df[rotary_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
+                r_cols[i].caption(f"**{sec}**")
+                r_cols[i].markdown(f"### {s:.1f}")
+            r_cols[-1].caption("**TOTAL**")
+            r_cols[-1].markdown(f"### {rotary_df['Score_Num'].sum():.1f}")
+
+            st.divider()
+
+            # --- ⚙️ รุ่น Other (ขนาดปกติ) ---
+            st.markdown("#### ⚙️ รุ่น Other")
+            other_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Other']
+            st.metric(label="คะแนนรวมรุ่นอื่นๆ", value=f"{other_df['Score_Num'].sum():.1f}")
                 
         else:
-            st.warning("⚠️ ไม่สามารถประมวลผลวันที่ได้ (Date Parse Error / 日付エラー)")
+            st.warning("⚠️ ไม่พบข้อมูลที่ระบุวันที่ถูกต้อง")
     else:
-        st.info("ยังไม่มีข้อมูลในระบบ (No Data / データなし)")
+        st.info("ยังไม่มีข้อมูลในระบบ")
 
 # ==========================================
 # TAB 2: บันทึกข้อมูล
@@ -149,7 +172,8 @@ with tab2:
             input_model = st.selectbox("รุ่น (Model / モデル)", ["Combine", "Tractor", "Rotary", "Other"])
             
         with col2:
-            input_score = st.text_input("คะแนน (Score / スコア)", value="0")
+            # ปรับตัวอย่างให้โชว์ทศนิยม
+            input_score = st.text_input("คะแนน (Score / スコア)", value="0.0")
             input_prob = st.text_input("ปัญหา* (Problem / 問題)")
             input_detail = st.text_area("รายละเอียดปัญหา (Detail / 詳細)")
             input_job_code = st.text_input("รหัสงาน (Job Code / ジョブコード)")
@@ -160,35 +184,41 @@ with tab2:
         
         if submitted:
             if not input_uar or not input_prob:
-                st.error("กรุณากรอกช่องที่มีเครื่องหมาย * (Required fields / 必須項目)")
+                st.error("กรุณากรอกช่องที่มีเครื่องหมาย *")
             else:
                 try:
                     pdf_link = ""
                     if input_pdf:
-                        with st.spinner('กำลังอัพโหลดไฟล์ PDF (Uploading... / アップロード中...)'):
+                        with st.spinner('กำลังอัพโหลดไฟล์ PDF...'):
                             pdf_link = upload_to_drive(input_pdf, f"UAR_{input_uar}_{date.today()}.pdf")
                     
+                    # ตรวจสอบทศนิยมก่อนเซฟ
+                    try:
+                        clean_score = float(input_score)
+                    except:
+                        clean_score = 0.0
+
                     row_data = [
                         next_no, input_date.strftime("%d/%m/%Y"), input_uar, 
                         input_cust, input_section, input_model, input_prob, 
-                        input_detail, input_job_code, input_job_name, input_score, pdf_link
+                        input_detail, input_job_code, input_job_name, f"{clean_score:.1f}", pdf_link
                     ]
                     get_worksheet().append_row(row_data)
                     
-                    send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nแผนก: {input_section}\nรุ่น: {input_model}\nคะแนน: {input_score}")
+                    send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nแผนก: {input_section}\nรุ่น: {input_model}\nคะแนน: {clean_score:.1f}")
                     
-                    st.success("บันทึกข้อมูลเรียบร้อยแล้ว! (Saved Successfully / 保存完了)")
+                    st.success("บันทึกข้อมูลเรียบร้อยแล้ว!")
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
-                    st.error(f"เกิดข้อผิดพลาด (Error / エラー): {e}")
+                    st.error(f"เกิดข้อผิดพลาด: {e}")
 
 # ==========================================
 # TAB 3: ค้นหาข้อมูล
 # ==========================================
 with tab3:
     st.header("ฐานข้อมูล UAR ทั้งหมด (Database / データベース)")
-    search_query = st.text_input("🔍 ค้นหา (Search / 検索) (ลูกค้า, แผนก, รุ่น, เลข UAR, ปัญหา)...")
+    search_query = st.text_input("🔍 ค้นหา (Search / 検索)...")
     
     if not df.empty:
         if search_query:
@@ -205,6 +235,3 @@ with tab3:
                 "ไฟล์ PDF\nPDF / PDFファイル": st.column_config.LinkColumn("เปิดไฟล์ (Open / 開く)")
             }
         )
-        st.caption(f"พบข้อมูลทั้งหมด {len(display_df)} รายการ (Items found / 件見つかりました)")
-    else:
-        st.info("ยังไม่มีข้อมูลในระบบ (No Data / データなし)")
