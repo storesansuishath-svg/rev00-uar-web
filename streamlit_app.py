@@ -6,11 +6,11 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import io
 import requests
-from datetime import date
+from datetime import date, datetime
 
 # ตั้งค่าหน้าเว็บ
 st.set_page_config(page_title="REV.00 UAR System", layout="wide")
-st.title("📂 ระบบ รวม UAR")
+st.title("📂 ระบบ REV.00 รวม UAR")
 
 # --- 1. การเชื่อมต่อ Google Services ---
 @st.cache_resource
@@ -37,7 +37,7 @@ def load_data_df():
     headers = [
         "ลำดับที่\nNo. / 番号", "วันที่\nDate / 日付", "หมายเลข UAR/PAR\nNo. / UAR/PAR番号",
         "ลูกค้า\nCustomer / 顧客", "แผนก\nSection / 部署", "รุ่น\nModel / モデル",
-        "ปัญหา\nProblem / 問題", "รายละเอียด\nDetail / 詳細", "รหัสงาน\nJob Code / ジョบコード", 
+        "ปัญหา\nProblem / 問題", "รายละเอียด\nDetail / 詳細", "รหัสงาน\nJob Code / ジョブコード", 
         "ชื่องาน\nJob Name / ジョブ名", "คะแนน\nScore / スコア", "ไฟล์ PDF\nPDF / PDFファイル"
     ]
     
@@ -76,96 +76,106 @@ tab1, tab2, tab3 = st.tabs([
 # TAB 1: แดชบอร์ด (Dashboard)
 # ==========================================
 with tab1:
-    st.header("📊 แดชบอร์ดสรุปผลคะแนน (Score Dashboard / スコアダッシュボード)")
+    # --- ส่วนการจัดการวันที่ปัจจุบัน ---
+    today = date.today()
+    current_month_str = today.strftime('%m/%Y')
     
     df_dash = df.copy()
-    if not df_dash.empty:
-        date_strs = df_dash['วันที่\nDate / 日付'].astype(str).str.strip()
-        df_dash['Date_Parsed'] = pd.to_datetime(date_strs, errors='coerce', dayfirst=True)
-        df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / スコア'], errors='coerce').fillna(0.0)
-        
-        valid_dates_df = df_dash.dropna(subset=['Date_Parsed']).copy()
-        
-        if not valid_dates_df.empty:
-            valid_dates_df['Month_Year'] = valid_dates_df['Date_Parsed'].dt.strftime('%m/%Y')
-            unique_months = sorted(valid_dates_df['Month_Year'].unique(), key=lambda x: pd.to_datetime(x, format='%m/%Y'), reverse=True)
-            
-            selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดูข้อมูล (Select Month / 月を選択):", unique_months)
-            df_filtered = valid_dates_df[valid_dates_df['Month_Year'] == selected_month]
-            
-            sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
+    
+    # เตรียมข้อมูลวันที่สำหรับการกรอง
+    date_strs = df_dash['วันที่\nDate / 日付'].astype(str).str.strip()
+    df_dash['Date_Parsed'] = pd.to_datetime(date_strs, errors='coerce', dayfirst=True)
+    df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / スコア'], errors='coerce').fillna(0.0)
+    
+    # สร้างรายการเดือนที่มีข้อมูล + เพิ่มเดือนปัจจุบันเข้าไปด้วย
+    valid_dates_df = df_dash.dropna(subset=['Date_Parsed']).copy()
+    valid_dates_df['Month_Year'] = valid_dates_df['Date_Parsed'].dt.strftime('%m/%Y')
+    
+    month_list = list(valid_dates_df['Month_Year'].unique())
+    if current_month_str not in month_list:
+        month_list.append(current_month_str)
+    
+    # เรียงลำดับเดือนจากใหม่ไปเก่า
+    month_list = sorted(month_list, key=lambda x: datetime.strptime(x, '%m/%Y'), reverse=True)
+    
+    # แถบเลือกเดือนด้านบน
+    selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการตรวจสอบ (Select Month):", month_list, index=month_list.index(current_month_str))
 
-            # --- 🌾 รุ่น Combine ---
-            st.subheader("🌾 รุ่น Combine")
-            combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
-            cols = st.columns(len(sections) + 1)
-            for i, sec in enumerate(sections):
-                score_sum = combine_df[combine_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
-                cols[i].metric(label=sec, value=f"{score_sum:.1f}")
-            cols[-1].metric(label="TOTAL", value=f"{combine_df['Score_Num'].sum():.1f}")
-            
-            st.divider()
+    # --- ส่วนหัวแดชบอร์ดแบบเด่น (Prominent Header) ---
+    st.markdown(f"""
+        <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; border-left: 8px solid #007bff; margin-bottom:20px;">
+            <h1 style="margin:0; color:#1f1f1f; font-size:40px;">📅 ประจำเดือน: {selected_month}</h1>
+            <p style="margin:0; color:#666;">สรุปผลคะแนน UAR/PAR แยกตามแผนกและผลิตภัณฑ์</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-            # --- 🚜 รุ่น Tractor ---
-            st.markdown("#### 🚜 รุ่น Tractor")
-            tractor_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Tractor']
-            t_cols = st.columns(len(sections) + 1)
-            for i, sec in enumerate(sections):
-                s = tractor_df[tractor_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
-                t_cols[i].caption(f"**{sec}**")
-                t_cols[i].markdown(f"### {s:.1f}")
-            t_cols[-1].caption("**TOTAL**")
-            t_cols[-1].markdown(f"### {tractor_df['Score_Num'].sum():.1f}")
+    # กรองข้อมูล
+    df_filtered = valid_dates_df[valid_dates_df['Month_Year'] == selected_month]
+    sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
 
-            st.write("")
+    # --- 🌾 รุ่น Combine ---
+    st.subheader("🌾 รุ่น Combine (Large Card)")
+    combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
+    cols = st.columns(len(sections) + 1)
+    for i, sec in enumerate(sections):
+        score_sum = combine_df[combine_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
+        cols[i].metric(label=sec, value=f"{score_sum:.1f}")
+    cols[-1].metric(label="TOTAL", value=f"{combine_df['Score_Num'].sum():.1f}")
+    
+    st.divider()
 
-            # --- 🔄 รุ่น Rotary ---
-            st.markdown("#### 🔄 รุ่น Rotary")
-            rotary_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Rotary']
-            r_cols = st.columns(len(sections) + 1)
-            for i, sec in enumerate(sections):
-                s = rotary_df[rotary_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
-                r_cols[i].caption(f"**{sec}**")
-                r_cols[i].markdown(f"### {s:.1f}")
-            r_cols[-1].caption("**TOTAL**")
-            r_cols[-1].markdown(f"### {rotary_df['Score_Num'].sum():.1f}")
+    # --- 🚜 รุ่น Tractor ---
+    st.markdown("#### 🚜 รุ่น Tractor")
+    tractor_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Tractor']
+    t_cols = st.columns(len(sections) + 1)
+    for i, sec in enumerate(sections):
+        s = tractor_df[tractor_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
+        t_cols[i].caption(f"**{sec}**")
+        t_cols[i].markdown(f"### {s:.1f}")
+    t_cols[-1].caption("**TOTAL**")
+    t_cols[-1].markdown(f"### {tractor_df['Score_Num'].sum():.1f}")
 
-            st.divider()
-            other_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Other']
-            st.metric(label="⚙️ รุ่น Other", value=f"{other_df['Score_Num'].sum():.1f}")
-    else:
-        st.info("ยังไม่มีข้อมูลในระบบ")
+    st.write("")
+
+    # --- 🔄 รุ่น Rotary ---
+    st.markdown("#### 🔄 รุ่น Rotary")
+    rotary_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Rotary']
+    r_cols = st.columns(len(sections) + 1)
+    for i, sec in enumerate(sections):
+        s = rotary_df[rotary_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
+        r_cols[i].caption(f"**{sec}**")
+        r_cols[i].markdown(f"### {s:.1f}")
+    r_cols[-1].caption("**TOTAL**")
+    r_cols[-1].markdown(f"### {rotary_df['Score_Num'].sum():.1f}")
+
+    st.divider()
+    other_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Other']
+    st.metric(label="⚙️ รุ่น Other", value=f"{other_df['Score_Num'].sum():.1f}")
 
 # ==========================================
-# TAB 2: บันทึกข้อมูล (เพิ่มระบบรหัสผ่าน)
+# TAB 2: บันทึกข้อมูล
 # ==========================================
 with tab2:
     st.header("บันทึก UAR/PAR ใหม่ (New Entry / 新規登録)")
 
-    # ระบบตรวจสอบรหัสผ่าน
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
     if not st.session_state["authenticated"]:
-        # ส่วนหน้าจอป้อนรหัสผ่าน
         with st.container():
-            st.warning("🔐 พื้นที่จำกัดเฉพาะเจ้าหน้าที่ (Restricted Area / 制限พื้นที่)")
-            pwd_input = st.text_input("กรุณาใส่รหัสผ่านเพื่อบันทึกข้อมูล (Enter Password / パスワードを入力):", type="password")
-            if st.button("ยืนยันรหัสผ่าน (Login / ログイン)"):
+            st.warning("🔐 พื้นที่จำกัดเฉพาะเจ้าหน้าที่")
+            pwd_input = st.text_input("กรุณาใส่รหัสผ่าน:", type="password")
+            if st.button("ยืนยันรหัสผ่าน"):
                 if pwd_input == "S1234s":
                     st.session_state["authenticated"] = True
                     st.rerun()
                 else:
-                    st.error("รหัสผ่านไม่ถูกต้อง (Incorrect Password / パスワードが違います)")
+                    st.error("รหัสผ่านไม่ถูกต้อง")
     else:
-        # ปุ่มออกจากระบบ
-        if st.button("🔒 ออกจากระบบ (Logout / ログアウト)"):
+        if st.button("🔒 ออกจากระบบ (Logout)"):
             st.session_state["authenticated"] = False
             st.rerun()
-            
         st.divider()
-        
-        # ฟอร์มบันทึกข้อมูลเดิม
         with st.form("entry_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
@@ -173,24 +183,20 @@ with tab2:
                 if not df.empty:
                     col_no = pd.to_numeric(df.iloc[:, 0], errors='coerce')
                     next_no = int(col_no.max()) + 1 if not col_no.dropna().empty else 1
-                
-                st.info(f"ลำดับที่ (Auto / 自動): {next_no}")
+                st.info(f"ลำดับที่ (Auto): {next_no}")
                 input_date = st.date_input("วันที่ (Date / 日付)", date.today())
                 input_uar = st.text_input("หมายเลข UAR/PAR* (No. / 番号)")
                 input_cust = st.text_input("ลูกค้า (Customer / 顧客)")
                 input_section = st.selectbox("แผนก (Section / 部署)", ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"])
                 input_model = st.selectbox("รุ่น (Model / モデル)", ["Combine", "Tractor", "Rotary", "Other"])
-                
             with col2:
                 input_score = st.text_input("คะแนน (Score / スコア)", value="0.0")
                 input_prob = st.text_input("ปัญหา* (Problem / 問題)")
                 input_detail = st.text_area("รายละเอียดปัญหา (Detail / 詳細)")
                 input_job_code = st.text_input("รหัสงาน (Job Code / ジョブコード)")
                 input_job_name = st.text_input("ชื่องาน (Job Name / ジョブ名)")
-                input_pdf = st.file_uploader("อัพโหลด PDF (Upload PDF / PDFアップロード) +", type=["pdf"])
-            
-            submitted = st.form_submit_button("💾 บันทึกข้อมูล (Save / 保存)")
-            
+                input_pdf = st.file_uploader("อัพโหลด PDF +", type=["pdf"])
+            submitted = st.form_submit_button("💾 บันทึกข้อมูล")
             if submitted:
                 if not input_uar or not input_prob:
                     st.error("กรุณากรอกช่องที่มีเครื่องหมาย *")
@@ -198,48 +204,35 @@ with tab2:
                     try:
                         pdf_link = ""
                         if input_pdf:
-                            with st.spinner('กำลังอัพโหลดไฟล์ PDF...'):
+                            with st.spinner('กำลังอัพโหลด...'):
                                 pdf_link = upload_to_drive(input_pdf, f"UAR_{input_uar}_{date.today()}.pdf")
-                        
                         try:
                             clean_score = float(input_score)
                         except:
                             clean_score = 0.0
-
                         row_data = [
                             next_no, input_date.strftime("%d/%m/%Y"), input_uar, 
                             input_cust, input_section, input_model, input_prob, 
                             input_detail, input_job_code, input_job_name, f"{clean_score:.1f}", pdf_link
                         ]
                         get_worksheet().append_row(row_data)
-                        
                         send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nแผนก: {input_section}\nรุ่น: {input_model}\nคะแนน: {clean_score:.1f}")
-                        
-                        st.success("บันทึกข้อมูลเรียบร้อยแล้ว!")
+                        st.success("บันทึกเรียบร้อย!")
                         st.cache_data.clear()
                         st.rerun()
                     except Exception as e:
-                        st.error(f"เกิดข้อผิดพลาด: {e}")
+                        st.error(f"Error: {e}")
 
 # ==========================================
 # TAB 3: ค้นหาข้อมูล
 # ==========================================
 with tab3:
-    st.header("ฐานข้อมูล UAR ทั้งหมด (Database / データベース)")
-    search_query = st.text_input("🔍 ค้นหา (Search / 検索)...")
-    
+    st.header("ฐานข้อมูล UAR ทั้งหมด")
+    search_query = st.text_input("🔍 ค้นหา (ลูกค้า, แผนก, รุ่น, เลข UAR, ปัญหา)...")
     if not df.empty:
         if search_query:
             mask = df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)
             display_df = df[mask]
         else:
             display_df = df.sort_index(ascending=False)
-            
-        st.dataframe(
-            display_df, 
-            use_container_width=True, 
-            hide_index=True,
-            column_config={
-                "ไฟล์ PDF\nPDF / PDFファイル": st.column_config.LinkColumn("เปิดไฟล์ (Open / 開く)")
-            }
-        )
+        st.dataframe(display_df, use_container_width=True, hide_index=True, column_config={"ไฟล์ PDF\nPDF / PDFファイル": st.column_config.LinkColumn("เปิดไฟล์")})
