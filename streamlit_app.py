@@ -105,7 +105,7 @@ with tab1:
     st.markdown(f"""
         <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; border-left: 8px solid #007bff; margin-bottom:20px;">
             <h1 style="margin:0; color:#1f1f1f; font-size:40px;">📅 ประจำเดือน: {selected_month}</h1>
-            <p style="margin:0; color:#666;">สรุปผลคะแนน UAR/PAR แยกตามแผนกและผลิตภัณฑ์</p>
+            <p style="margin:0; color:#666;">สรุปผลคะแนน UAR/PAR แยกตามแผนก</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -114,7 +114,7 @@ with tab1:
     sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
 
     # --- 🌾 รุ่น Combine ---
-    st.subheader("🌾 รุ่น Combine (Large Card)")
+    st.subheader("🌾 รุ่น Combine")
     combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
     cols = st.columns(len(sections) + 1)
     for i, sec in enumerate(sections):
