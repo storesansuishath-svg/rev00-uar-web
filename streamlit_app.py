@@ -34,11 +34,11 @@ def get_worksheet():
 def load_data_df():
     ws = get_worksheet()
     all_values = ws.get_all_values()
-    # กำหนดหัวตาราง 11 คอลัมน์ (เพิ่ม แผนก / Section)
+    # หัวตาราง 12 คอลัมน์
     headers = [
         "ลำดับที่\nNo. / 番号", "วันที่\nDate / 日付", "หมายเลข UAR/PAR\nNo. / UAR/PAR番号",
-        "ลูกค้า\nCustomer / 顧客", "แผนก\nSection / 部署", "ปัญหา\nProblem / 問題", 
-        "รายละเอียด\nDetail / 詳細", "รหัสงาน\nJob Code / ジョブコード", 
+        "ลูกค้า\nCustomer / 顧客", "แผนก\nSection / 部署", "รุ่น\nModel / モデル",
+        "ปัญหา\nProblem / 問題", "รายละเอียด\nDetail / 詳細", "รหัสงาน\nJob Code / ジョブコード", 
         "ชื่องาน\nJob Name / ジョブ名", "คะแนน\nScore / スコア", "ไฟล์ PDF\nPDF / PDFファイル"
     ]
     if len(all_values) > 2:
@@ -68,7 +68,6 @@ with tab1:
     with st.form("entry_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            # รันเลขลำดับอัตโนมัติ
             next_no = 1
             if not df.empty:
                 col_no = pd.to_numeric(df.iloc[:, 0], errors='coerce')
@@ -78,12 +77,12 @@ with tab1:
             input_date = st.date_input("วันที่ (日付)", date.today())
             input_uar = st.text_input("หมายเลข UAR/PAR* (番号)")
             input_cust = st.text_input("ลูกค้า (顧客)")
-            # --- เพิ่มช่องแผนก ---
-            input_section = st.text_input("แผนก (Section / 部署)")
-            # --- ช่องคะแนนแบบคีย์เอง ---
-            input_score = st.text_input("คะแนน (Score / スコア)")
+            # --- เปลี่ยนเป็นรายการเลือกแผนกตามที่ระบุมา ---
+            input_section = st.selectbox("แผนก (Section / 部署)", ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"])
+            input_model = st.selectbox("รุ่น (Model / モデル)", ["Combine", "Tractor", "Rotary", "Other"])
             
         with col2:
+            input_score = st.text_input("คะแนน (Score / スコア)")
             input_prob = st.text_input("ปัญหา* (問題)")
             input_detail = st.text_area("รายละเอียดปัญหา (詳細)")
             input_job_code = st.text_input("รหัสงาน (ジョブコード)")
@@ -102,18 +101,17 @@ with tab1:
                         with st.spinner('กำลังอัพโหลดไฟล์ PDF...'):
                             pdf_link = upload_to_drive(input_pdf, f"UAR_{input_uar}_{date.today()}.pdf")
                     
-                    # เรียงข้อมูล 11 ช่องให้ตรงกับ Sheet
                     row_data = [
                         next_no, input_date.strftime("%d/%m/%Y"), input_uar, 
-                        input_cust, input_section, input_prob, input_detail, 
-                        input_job_code, input_job_name, input_score, pdf_link
+                        input_cust, input_section, input_model, input_prob, 
+                        input_detail, input_job_code, input_job_name, input_score, pdf_link
                     ]
                     get_worksheet().append_row(row_data)
                     
                     # ส่ง LINE Notify
-                    send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nแผนก: {input_section}\nคะแนน: {input_score}")
+                    send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nแผนก: {input_section}\nรุ่น: {input_model}\nคะแนน: {input_score}")
                     
-                    st.success("บันทึกสำเร็จ! (保存完了)")
+                    st.success("บันทึกข้อมูลเรียบร้อยแล้ว!")
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
@@ -121,9 +119,7 @@ with tab1:
 
 with tab2:
     st.header("ฐานข้อมูล UAR ทั้งหมด (データベース)")
-    
-    # ระบบค้นหาคีย์เวิร์ด (ค้นหาแผนกได้ด้วย)
-    search_query = st.text_input("🔍 ค้นหา (ลูกค้า, แผนก, เลข UAR, ปัญหา)...")
+    search_query = st.text_input("🔍 ค้นหา (ลูกค้า, แผนก, รุ่น, เลข UAR, ปัญหา)...")
     
     if not df.empty:
         if search_query:
