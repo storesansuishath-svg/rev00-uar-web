@@ -76,45 +76,37 @@ with tab1:
     
     df_dash = df.copy()
     if not df_dash.empty:
-        # แปลงวันที่เพื่อนำมาสร้างตัวกรองเดือน
-        df_dash['Date_Parsed'] = pd.to_datetime(df_dash['วันที่\nDate / 日付'], format='%d/%m/%Y', errors='coerce')
+        # ปรับการอ่านวันที่ให้ยืดหยุ่นขึ้น (ไม่ล็อค Format)
+        df_dash['Date_Parsed'] = pd.to_datetime(df_dash['วันที่\nDate / 日付'], errors='coerce', dayfirst=True)
         df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / スコア'], errors='coerce').fillna(0)
         
-        # คัดกรองเฉพาะแถวที่มีวันที่ถูกต้อง
+        # คัดเอาเฉพาะแถวที่ระบบแปลงวันที่สำเร็จ
         valid_dates_df = df_dash.dropna(subset=['Date_Parsed']).copy()
         
         if not valid_dates_df.empty:
-            # สร้างคอลัมน์ เดือน/ปี (เช่น 04/2026) เพื่อใช้เป็นตัวเลือก
             valid_dates_df['Month_Year'] = valid_dates_df['Date_Parsed'].dt.strftime('%m/%Y')
-            
-            # ดึงรายการเดือนทั้งหมดที่มีในระบบมาเรียงลำดับจากใหม่ไปเก่า
             unique_months = valid_dates_df['Month_Year'].unique()
             unique_months = sorted(unique_months, key=lambda x: pd.to_datetime(x, format='%m/%Y'), reverse=True)
             
-            # --- กล่องเลือกเดือน ---
             selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการดูข้อมูล:", unique_months)
-            
-            # กรองข้อมูลให้เหลือเฉพาะเดือนที่เลือก
             df_filtered = valid_dates_df[valid_dates_df['Month_Year'] == selected_month]
             
             st.markdown(f"**จำนวน UAR ทั้งหมดในเดือนนี้:** {len(df_filtered)} รายการ")
             
-            # --- ส่วนที่ 1: การ์ดใหญ่ (Combine) ---
+            # --- การ์ดใหญ่ (Combine) ---
             st.markdown("### 🌾 รุ่น Combine (รวมคะแนนแยกตามแผนก)")
             combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
-            
             sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
             cols = st.columns(len(sections))
             for i, sec in enumerate(sections):
                 score_sum = combine_df[combine_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
                 cols[i].metric(label=sec, value=f"{int(score_sum)}")
             
-            st.divider() # เส้นคั่น
+            st.divider()
             
-            # --- ส่วนที่ 2: การ์ดเล็ก (Tractor, Rotary, Other) ---
+            # --- การ์ดเล็ก (Tractor, Rotary, Other) ---
             st.markdown("### 🚜 รุ่นอื่นๆ (รวมคะแนน)")
             cols_small = st.columns(3)
-            
             models_small = ["Tractor", "Rotary", "Other"]
             icons = ["🚜 Tractor", "🔄 Rotary", "⚙️ Other"]
             
@@ -123,9 +115,9 @@ with tab1:
                 cols_small[i].metric(label=icons[i], value=f"{int(score_sum)}")
                 
         else:
-            st.info("ยังไม่มีข้อมูลวันที่ที่ถูกต้องในระบบ (รูปแบบที่รองรับ: วว/ดด/ปปปป)")
+            st.warning("⚠️ พบข้อมูลในระบบ แต่ระบบอ่านรูปแบบวันที่ไม่ออก (กรุณาตรวจสอบคอลัมน์ 'วันที่' ใน Google Sheet ว่าใส่ข้อมูลครบหรือไม่)")
     else:
-        st.info("ยังไม่มีข้อมูลในระบบ")
+        st.info("ยังไม่มีข้อมูลในระบบ หรือยังไม่ได้บันทึก UAR แรก")
 
 # ==========================================
 # TAB 2: บันทึกข้อมูล
@@ -142,7 +134,7 @@ with tab2:
             
             st.info(f"ลำดับที่ (Auto): {next_no}")
             
-            # ช่องนี้จะมีปฏิทินให้คลิกเลือกอยู่แล้วครับ
+            # วันที่แบบมีปฏิทินให้จิ้มเลือก (จะแสดงผลเป็น YYYY/MM/DD บนฟอร์ม แต่จะเซฟเป็น DD/MM/YYYY)
             input_date = st.date_input("วันที่ (日付)", date.today())
             
             input_uar = st.text_input("หมายเลข UAR/PAR* (番号)")
