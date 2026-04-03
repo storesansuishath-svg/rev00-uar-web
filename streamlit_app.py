@@ -34,7 +34,7 @@ def get_worksheet():
 def load_data_df():
     ws = get_worksheet()
     all_values = ws.get_all_values()
-    # กำหนดหัวตาราง 12 คอลัมน์ (เพิ่ม รุ่น / Model)
+    # หัวตาราง 12 คอลัมน์
     headers = [
         "ลำดับที่\nNo. / 番号", "วันที่\nDate / 日付", "หมายเลข UAR/PAR\nNo. / UAR/PAR番号",
         "ลูกค้า\nCustomer / 顧客", "แผนก\nSection / 部署", "รุ่น\nModel / モデル",
@@ -77,8 +77,8 @@ with tab1:
             input_date = st.date_input("วันที่ (日付)", date.today())
             input_uar = st.text_input("หมายเลข UAR/PAR* (番号)")
             input_cust = st.text_input("ลูกค้า (顧客)")
-            input_section = st.text_input("แผนก (Section / 部署)")
-            # --- เปลี่ยนเป็นช่องเลือก Model ---
+            # --- เปลี่ยนเป็นรายการเลือกแผนกตามที่ระบุมา ---
+            input_section = st.selectbox("แผนก (Section / 部署)", ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"])
             input_model = st.selectbox("รุ่น (Model / モデル)", ["Combine", "Tractor", "Rotary", "Other"])
             
         with col2:
@@ -87,7 +87,7 @@ with tab1:
             input_detail = st.text_area("รายละเอียดปัญหา (詳細)")
             input_job_code = st.text_input("รหัสงาน (ジョブコード)")
             input_job_name = st.text_input("ชื่องาน (ジョブ名)")
-            input_pdf = st.file_uploader("อัพโหลด PDF (PDFアップโหลด) +", type=["pdf"])
+            input_pdf = st.file_uploader("อัพโหลด PDF (PDFアップロード) +", type=["pdf"])
         
         submitted = st.form_submit_button("💾 บันทึกข้อมูล (保存)")
         
@@ -101,7 +101,6 @@ with tab1:
                         with st.spinner('กำลังอัพโหลดไฟล์ PDF...'):
                             pdf_link = upload_to_drive(input_pdf, f"UAR_{input_uar}_{date.today()}.pdf")
                     
-                    # เรียงข้อมูล 12 ช่องให้ตรงกับหัวตารางใหม่
                     row_data = [
                         next_no, input_date.strftime("%d/%m/%Y"), input_uar, 
                         input_cust, input_section, input_model, input_prob, 
@@ -109,8 +108,8 @@ with tab1:
                     ]
                     get_worksheet().append_row(row_data)
                     
-                    # ส่ง LINE Notify พร้อมข้อมูลรุ่น
-                    send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nรุ่น: {input_model}\nคะแนน: {input_score}")
+                    # ส่ง LINE Notify
+                    send_line_notify(f"\n🔔 UAR ใหม่: {input_uar}\nแผนก: {input_section}\nรุ่น: {input_model}\nคะแนน: {input_score}")
                     
                     st.success("บันทึกข้อมูลเรียบร้อยแล้ว!")
                     st.cache_data.clear()
@@ -120,7 +119,7 @@ with tab1:
 
 with tab2:
     st.header("ฐานข้อมูล UAR ทั้งหมด (データベース)")
-    search_query = st.text_input("🔍 ค้นหา (ลูกค้า, รุ่น, แผนก, เลข UAR, ปัญหา)...")
+    search_query = st.text_input("🔍 ค้นหา (ลูกค้า, แผนก, รุ่น, เลข UAR, ปัญหา)...")
     
     if not df.empty:
         if search_query:
