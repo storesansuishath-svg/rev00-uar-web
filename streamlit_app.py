@@ -36,8 +36,10 @@ st.markdown("""
 # --- ส่วนหัวของเว็บ (Header & Logo) ---
 col_logo, col_title = st.columns([1, 8])
 with col_logo:
-    # ใช้ st.image เพื่อแก้ปัญหา Google Drive ไม่อนุญาตให้โชว์รูป
-    st.image("https://drive.google.com/uc?export=view&id=1zCjSjSbCO-mbsaGoDI6g0G-bfmyVfqFV", use_container_width=True)
+    # ⬇️ บรรทัดใส่ Logo อยู่ตรงนี้ครับ ⬇️
+    st.image("https://lh3.googleusercontent.com/d/1zCjSjSbCO-mbsaGoDI6g0G-bfmyVfqFV", use_container_width=True)
+    # ⬆️ บรรทัดใส่ Logo อยู่ตรงนี้ครับ ⬆️
+    
 with col_title:
     st.markdown("""
         <div style="padding-top: 5px;">
@@ -212,6 +214,7 @@ with tab1:
         
     c_total = combine_df['Score_Num'].sum()
     c_cases = len(combine_df)
+    
     cols[-1].markdown("<div style='font-size:14px; color:#555;'>TOTAL</div>", unsafe_allow_html=True)
     cols[-1].markdown(f"<h2 style='margin-top:-10px; margin-bottom:0px; padding-top:0;'>{get_score_grade_html(c_total)}</h2><div style='color:gray; font-size:14px; margin-top:-5px;'>({c_cases} case)</div>", unsafe_allow_html=True)
     
