@@ -7,6 +7,7 @@ from googleapiclient.http import MediaIoBaseUpload
 import io
 import requests
 from datetime import date, datetime
+import plotly.express as px  # Library สำหรับทำกราฟสวยๆ
 
 # ตั้งค่าหน้าเว็บ
 st.set_page_config(page_title="REV.00 UAR System", layout="wide")
@@ -38,7 +39,7 @@ def load_data_df():
         "ลำดับที่\nNo. / 番号", "วันที่\nDate / 日付", "หมายเลข UAR/PAR\nNo. / UAR/PAR番号",
         "ลูกค้า\nCustomer / 顧客", "แผนก\nSection / 部署", "รุ่น\nModel / モデル",
         "ปัญหา\nProblem / 問題", "รายละเอียด\nDetail / 詳細", "รหัสงาน\nJob Code / ジョブコード", 
-        "ชื่องาน\nJob Name / ジョブ名", "คะแนน\nScore / スコア", "ไฟล์ PDF\nPDF / PDFファイル"
+        "ชื่องาน\nJob Name / ジョブ名", "คะแนน\nScore / สコア", "ไฟล์ PDF\nPDF / PDFファイル"
     ]
     
     if len(all_values) > 2:
@@ -64,26 +65,42 @@ def send_line_notify(message):
     requests.post('https://notify-api.line.me/api/notify', headers=headers, data={'message': message})
 
 def get_score_grade_html(score):
-    """ฟังก์ชันจัดรูปแบบสีและตัวอักษรของคะแนนรวม"""
     if score == 0.0:
-        val_color = "#28a745" # สีเขียว
-        grade = "A"
-        grade_color = "#28a745" # สีเขียว
+        val_color = "#28a745"; grade = "A"; grade_color = "#28a745"
     elif score <= 5.0:
-        val_color = "#28a745" # สีเขียว
-        grade = "B"
-        grade_color = "#28a745" # สีเขียว
+        val_color = "#28a745"; grade = "B"; grade_color = "#28a745"
     elif score <= 20.0:
-        val_color = "#dc3545" # สีแดง
-        grade = "C"
-        grade_color = "#dc3545" # สีแดง
+        val_color = "#dc3545"; grade = "C"; grade_color = "#dc3545"
     else:
-        val_color = "#dc3545" # สีแดง
-        grade = "D"
-        grade_color = "#8b0000" # สีแดงเข้ม
-
-    # ส่งกลับเป็นโค้ด HTML เพื่อให้ Streamlit แสดงผลได้
+        val_color = "#dc3545"; grade = "D"; grade_color = "#8b0000"
     return f'<span style="color:{val_color};">{score:.1f}</span> <span style="color:{grade_color}; font-weight:900; font-size:1.1em; margin-left:5px;">{grade}</span>'
+
+# ฟังก์ชันสร้างกราฟแท่ง
+def create_bar_chart(data, model_name, color):
+    sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
+    model_data = data[data['รุ่น\nModel / モデル'] == model_name]
+    
+    scores = []
+    for sec in sections:
+        val = model_data[model_data['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
+        scores.append(val)
+    
+    chart_df = pd.DataFrame({"แผนก (Section)": sections, "คะแนนรวม (Total Score)": scores})
+    
+    fig = px.bar(
+        chart_df, x="แผนก (Section)", y="คะแนนรวม (Total Score)",
+        text="คะแนนรวม (Total Score)",
+        title=f"สรุปคะแนนรายแผนก: {model_name}",
+        color_discrete_sequence=[color]
+    )
+    fig.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+    fig.update_layout(
+        yaxis=dict(title='คะแนน (Score)'),
+        xaxis=dict(title='แผนก (Section)'),
+        margin=dict(l=20, r=20, t=40, b=20),
+        height=400 if model_name == "Combine" else 300
+    )
+    return fig
 
 # --- 3. หน้าจอการทำงาน ---
 df = load_data_df()
@@ -98,18 +115,14 @@ tab1, tab2, tab3 = st.tabs([
 # TAB 1: แดชบอร์ด (Dashboard)
 # ==========================================
 with tab1:
-    # --- ส่วนการจัดการวันที่ปัจจุบัน ---
     today = date.today()
     current_month_str = today.strftime('%m/%Y')
-    
     df_dash = df.copy()
     
-    # เตรียมข้อมูลวันที่สำหรับการกรอง
     date_strs = df_dash['วันที่\nDate / 日付'].astype(str).str.strip()
     df_dash['Date_Parsed'] = pd.to_datetime(date_strs, errors='coerce', dayfirst=True)
-    df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / スコア'], errors='coerce').fillna(0.0)
+    df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / สコア'], errors='coerce').fillna(0.0)
     
-    # สร้างรายการเดือนที่มีข้อมูล + เพิ่มเดือนปัจจุบันเข้าไปด้วย
     valid_dates_df = df_dash.dropna(subset=['Date_Parsed']).copy()
     valid_dates_df['Month_Year'] = valid_dates_df['Date_Parsed'].dt.strftime('%m/%Y')
     
@@ -117,13 +130,9 @@ with tab1:
     if current_month_str not in month_list:
         month_list.append(current_month_str)
     
-    # เรียงลำดับเดือนจากใหม่ไปเก่า
     month_list = sorted(month_list, key=lambda x: datetime.strptime(x, '%m/%Y'), reverse=True)
-    
-    # แถบเลือกเดือนด้านบน
     selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการตรวจสอบ (Select Month):", month_list, index=month_list.index(current_month_str))
 
-    # --- ส่วนหัวแดชบอร์ดแบบเด่น (Prominent Header) ---
     st.markdown(f"""
         <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; border-left: 8px solid #007bff; margin-bottom:20px;">
             <h1 style="margin:0; color:#1f1f1f; font-size:40px;">📅 ประจำเดือน: {selected_month}</h1>
@@ -131,51 +140,42 @@ with tab1:
         </div>
     """, unsafe_allow_html=True)
 
-    # กรองข้อมูล
     df_filtered = valid_dates_df[valid_dates_df['Month_Year'] == selected_month]
     sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
 
-    # --- 🌾 รุ่น Combine ---
+    # --- 🌾 รุ่น Combine (ใหญ่สุด) ---
     st.subheader("🌾 รุ่น Combine")
     combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
+    
+    # แสดงกราฟแท่ง Combine
+    st.plotly_chart(create_bar_chart(df_filtered, "Combine", "#28a745"), use_container_width=True)
+    
     cols = st.columns(len(sections) + 1)
     for i, sec in enumerate(sections):
         score_sum = combine_df[combine_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
         cols[i].metric(label=sec, value=f"{score_sum:.1f}")
-        
     c_total = combine_df['Score_Num'].sum()
     cols[-1].markdown("<div style='font-size:14px; color:#555;'>TOTAL</div>", unsafe_allow_html=True)
-    cols[-1].markdown(f"<h2 style='margin-top:-10px; padding-top:0;'>{get_score_grade_html(c_total)}</h2>", unsafe_allow_html=True)
+    cols[-1].markdown(f"<h2 style='margin-top:-10px;'>{get_score_grade_html(c_total)}</h2>", unsafe_allow_html=True)
     
     st.divider()
 
-    # --- 🚜 รุ่น Tractor ---
-    st.markdown("#### 🚜 รุ่น Tractor")
-    tractor_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Tractor']
-    t_cols = st.columns(len(sections) + 1)
-    for i, sec in enumerate(sections):
-        s = tractor_df[tractor_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
-        t_cols[i].caption(f"**{sec}**")
-        t_cols[i].markdown(f"### {s:.1f}")
-        
-    t_total = tractor_df['Score_Num'].sum()
-    t_cols[-1].caption("**TOTAL**")
-    t_cols[-1].markdown(f"### {get_score_grade_html(t_total)}", unsafe_allow_html=True)
+    # --- 🚜 รุ่น Tractor & 🔄 รุ่น Rotary (วางคู่กัน) ---
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        st.markdown("### 🚜 รุ่น Tractor")
+        st.plotly_chart(create_bar_chart(df_filtered, "Tractor", "#007bff"), use_container_width=True)
+        tractor_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Tractor']
+        t_total = tractor_df['Score_Num'].sum()
+        st.markdown(f"**คะแนนรวม Tractor:** {get_score_grade_html(t_total)}", unsafe_allow_html=True)
 
-    st.write("")
-
-    # --- 🔄 รุ่น Rotary ---
-    st.markdown("#### 🔄 รุ่น Rotary")
-    rotary_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Rotary']
-    r_cols = st.columns(len(sections) + 1)
-    for i, sec in enumerate(sections):
-        s = rotary_df[rotary_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
-        r_cols[i].caption(f"**{sec}**")
-        r_cols[i].markdown(f"### {s:.1f}")
-        
-    r_total = rotary_df['Score_Num'].sum()
-    r_cols[-1].caption("**TOTAL**")
-    r_cols[-1].markdown(f"### {get_score_grade_html(r_total)}", unsafe_allow_html=True)
+    with col_right:
+        st.markdown("### 🔄 รุ่น Rotary")
+        st.plotly_chart(create_bar_chart(df_filtered, "Rotary", "#ffc107"), use_container_width=True)
+        rotary_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Rotary']
+        r_total = rotary_df['Score_Num'].sum()
+        st.markdown(f"**คะแนนรวม Rotary:** {get_score_grade_html(r_total)}", unsafe_allow_html=True)
 
     st.divider()
     other_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Other']
@@ -187,10 +187,8 @@ with tab1:
 # ==========================================
 with tab2:
     st.header("บันทึก UAR/PAR ใหม่ (New Entry / 新規登録)")
-
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
-
     if not st.session_state["authenticated"]:
         with st.container():
             st.warning("🔐 พื้นที่จำกัดเฉพาะเจ้าหน้าที่")
@@ -220,7 +218,7 @@ with tab2:
                 input_section = st.selectbox("แผนก (Section / 部署)", ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"])
                 input_model = st.selectbox("รุ่น (Model / モデル)", ["Combine", "Tractor", "Rotary", "Other"])
             with col2:
-                input_score = st.text_input("คะแนน (Score / スコア)", value="0.0")
+                input_score = st.text_input("คะแนน (Score / สコア)", value="0.0")
                 input_prob = st.text_input("ปัญหา* (Problem / 問題)")
                 input_detail = st.text_area("รายละเอียดปัญหา (Detail / 詳細)")
                 input_job_code = st.text_input("รหัสงาน (Job Code / ジョブコード)")
@@ -258,7 +256,6 @@ with tab2:
 # ==========================================
 with tab3:
     st.header("ฐานข้อมูล UAR ทั้งหมด")
-    
     if not df.empty:
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
@@ -271,21 +268,15 @@ with tab3:
             model_list = df['รุ่น\nModel / モデル'].dropna().unique().tolist()
             model_list = [m for m in model_list if str(m).strip() != ""] 
             selected_models = st.multiselect("🚜 กรองตามรุ่น:", model_list)
-
         display_df = df.copy()
-        
         if selected_sections:
             display_df = display_df[display_df['แผนก\nSection / 部署'].isin(selected_sections)]
-            
         if selected_models:
             display_df = display_df[display_df['รุ่น\nModel / モデル'].isin(selected_models)]
-            
         if search_query:
             mask = display_df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)
             display_df = display_df[mask]
-            
         display_df = display_df.sort_index(ascending=False)
-        
         d_col1, d_col2 = st.columns([1, 2])
         with d_col1:
             st.markdown(f"**จำนวนผลลัพธ์:** {len(display_df)} รายการ")
@@ -298,12 +289,4 @@ with tab3:
                 mime="text/csv",
                 use_container_width=True
             )
-
-        st.dataframe(
-            display_df, 
-            use_container_width=True, 
-            hide_index=True, 
-            column_config={"ไฟล์ PDF\nPDF / PDFファイル": st.column_config.LinkColumn("เปิดไฟล์")}
-        )
-    else:
-        st.info("ยังไม่มีข้อมูลในระบบ")
+        st.dataframe(display_df, use_container_width=True, hide_index=True, column_config={"ไฟล์ PDF\nPDF / PDFไฟล์": st.column_config.LinkColumn("เปิดไฟล์")})
