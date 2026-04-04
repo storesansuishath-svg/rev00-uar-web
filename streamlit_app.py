@@ -187,7 +187,7 @@ with tab1:
     # กล่องแสดงเดือน
     st.markdown(f"""
         <div style="background-color:#e9f2fb; padding:20px; border-radius:10px; border-left: 8px solid #0056b3; margin-bottom:20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-            <h1 style="margin:0; color:#1f1f1f; font-size:35px;">📅 ประจำเดือน: {selected_month}</h1>
+            <h1 style="margin:0; color:#1f1f1f; font-size:25px;">📅 ประจำเดือน: {selected_month}</h1>
             <p style="margin:0; color:#555;">สรุปผลคะแนน UAR/PAR แยกตามแผนก</p>
         </div>
     """, unsafe_allow_html=True)
