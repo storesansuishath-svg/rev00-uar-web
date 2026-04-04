@@ -12,16 +12,42 @@ import plotly.express as px
 # ตั้งค่าหน้าเว็บ
 st.set_page_config(page_title="UAR SANSUISHA", layout="wide")
 
-# --- ส่วนหัวของเว็บ (Header & Logo) โฉมใหม่ ---
+# --- CUSTOM CSS (ตกแต่ง Tabs ให้ดูเป็นมืออาชีพ) ---
 st.markdown("""
-    <div style="display: flex; align-items: center; padding: 15px 25px; background-color: rgba(0, 86, 179, 0.05); border-radius: 12px; border-left: 8px solid #0056b3; margin-bottom: 25px;">
-        <img src="https://drive.google.com/uc?export=view&id=1zCjSjSbCO-mbsaGoDI6g0G-bfmyVfqFV" style="height: 60px; margin-right: 25px; object-fit: contain;" alt="SANSUISHA Logo">
-        <div>
+    <style>
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #f8f9fa;
+        border-radius: 8px 8px 0 0;
+        padding: 10px 20px;
+        box-shadow: inset 0 -2px 0 0 #e0e0e0;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: white;
+        box-shadow: inset 0 -3px 0 0 #0056b3;
+        font-weight: 800 !important;
+        color: #0056b3 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- ส่วนหัวของเว็บ (Header & Logo) ---
+col_logo, col_title = st.columns([1, 8])
+with col_logo:
+    # ใช้ st.image เพื่อแก้ปัญหา Google Drive ไม่อนุญาตให้โชว์รูป
+    st.image("https://drive.google.com/uc?export=view&id=1zCjSjSbCO-mbsaGoDI6g0G-bfmyVfqFV", use_container_width=True)
+with col_title:
+    st.markdown("""
+        <div style="padding-top: 5px;">
             <h1 style="margin: 0; font-size: 38px; font-weight: 900; color: #0056b3; line-height: 1.2;">UAR SANSUISHA</h1>
             <span style="color: #666; font-size: 15px; font-weight: 500;">Quality Assurance & Problem Tracking System</span>
         </div>
-    </div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+
+st.write("") # เว้นบรรทัด
+st.divider()
 
 # --- 1. การเชื่อมต่อ Google Services ---
 @st.cache_resource
@@ -120,7 +146,8 @@ def create_bar_chart(data, model_name, color):
         yaxis=dict(title='คะแนน (Score)'),
         xaxis=dict(title='แผนก (Section)'),
         margin=dict(l=20, r=20, t=40, b=20),
-        height=400 if model_name == "Combine" else 300
+        height=400 if model_name == "Combine" else 300,
+        plot_bgcolor="rgba(0,0,0,0)"
     )
     return fig
 
@@ -155,10 +182,10 @@ with tab1:
     month_list = sorted(month_list, key=lambda x: datetime.strptime(x, '%m/%Y'), reverse=True)
     selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการตรวจสอบ (Select Month):", month_list, index=month_list.index(current_month_str))
 
-    # กล่องแสดงเดือนสีฟ้าแบบ Professional
+    # กล่องแสดงเดือน
     st.markdown(f"""
-        <div style="background-color:#e9f2fb; padding:20px; border-radius:10px; border-left: 8px solid #0056b3; margin-bottom:20px;">
-            <h1 style="margin:0; color:#1f1f1f; font-size:40px;">📅 ประจำเดือน: {selected_month}</h1>
+        <div style="background-color:#e9f2fb; padding:20px; border-radius:10px; border-left: 8px solid #0056b3; margin-bottom:20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+            <h1 style="margin:0; color:#1f1f1f; font-size:35px;">📅 ประจำเดือน: {selected_month}</h1>
             <p style="margin:0; color:#555;">สรุปผลคะแนน UAR/PAR แยกตามแผนก</p>
         </div>
     """, unsafe_allow_html=True)
@@ -167,9 +194,13 @@ with tab1:
     sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
 
     # --- 🌾 รุ่น Combine (ใหญ่สุด) ---
-    st.subheader("🌾 รุ่น Combine")
-    combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
+    st.markdown("""
+        <div style="background-color: #f0fdf4; border-left: 6px solid #28a745; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+            <h2 style="margin:0; color: #15803d;">🌾 รุ่น Combine</h2>
+        </div>
+    """, unsafe_allow_html=True)
     
+    combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
     st.plotly_chart(create_bar_chart(df_filtered, "Combine", "#28a745"), use_container_width=True)
     
     cols = st.columns(len(sections) + 1)
@@ -181,8 +212,6 @@ with tab1:
         
     c_total = combine_df['Score_Num'].sum()
     c_cases = len(combine_df)
-    
-    # [แก้ไขให้ข้อความเคสตกมาอยู่บรรทัดล่างเรียบร้อยแล้ว]
     cols[-1].markdown("<div style='font-size:14px; color:#555;'>TOTAL</div>", unsafe_allow_html=True)
     cols[-1].markdown(f"<h2 style='margin-top:-10px; margin-bottom:0px; padding-top:0;'>{get_score_grade_html(c_total)}</h2><div style='color:gray; font-size:14px; margin-top:-5px;'>({c_cases} case)</div>", unsafe_allow_html=True)
     
@@ -192,22 +221,31 @@ with tab1:
     col_left, col_right = st.columns(2)
     
     with col_left:
-        st.markdown("### 🚜 รุ่น Tractor")
+        st.markdown("""
+            <div style="background-color: #eff6ff; border-left: 6px solid #007bff; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <h3 style="margin:0; color: #0056b3;">🚜 รุ่น Tractor</h3>
+            </div>
+        """, unsafe_allow_html=True)
         st.plotly_chart(create_bar_chart(df_filtered, "Tractor", "#007bff"), use_container_width=True)
         tractor_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Tractor']
         t_total = tractor_df['Score_Num'].sum()
         t_cases = len(tractor_df)
-        st.markdown(f"**คะแนนรวม Tractor:** {get_score_grade_html(t_total)} <span style='color:gray;'>({t_cases} case)</span>", unsafe_allow_html=True)
+        st.markdown(f"**คะแนนรวม Tractor:** &nbsp; {get_score_grade_html(t_total)} <span style='color:gray;'>({t_cases} case)</span>", unsafe_allow_html=True)
 
     with col_right:
-        st.markdown("### 🔄 รุ่น Rotary")
+        st.markdown("""
+            <div style="background-color: #fffdf0; border-left: 6px solid #ffc107; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <h3 style="margin:0; color: #b38600;">🔄 รุ่น Rotary</h3>
+            </div>
+        """, unsafe_allow_html=True)
         st.plotly_chart(create_bar_chart(df_filtered, "Rotary", "#ffc107"), use_container_width=True)
         rotary_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Rotary']
         r_total = rotary_df['Score_Num'].sum()
         r_cases = len(rotary_df)
-        st.markdown(f"**คะแนนรวม Rotary:** {get_score_grade_html(r_total)} <span style='color:gray;'>({r_cases} case)</span>", unsafe_allow_html=True)
+        st.markdown(f"**คะแนนรวม Rotary:** &nbsp; {get_score_grade_html(r_total)} <span style='color:gray;'>({r_cases} case)</span>", unsafe_allow_html=True)
 
     st.divider()
+    
     other_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Other']
     o_total = other_df['Score_Num'].sum()
     o_cases = len(other_df)
@@ -320,4 +358,4 @@ with tab3:
                 mime="text/csv",
                 use_container_width=True
             )
-        st.dataframe(display_df, use_container_width=True, hide_index=True, column_config={"ไฟล์ PDF\nPDF / PDFไฟล์": st.column_config.LinkColumn("เปิดไฟล์")})
+        st.dataframe(display_df, use_container_width=True, hide_index=True, column_config={"ไฟล์ PDF\nPDF / PDFファイル": st.column_config.LinkColumn("เปิดไฟล์")})
