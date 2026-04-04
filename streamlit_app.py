@@ -7,7 +7,7 @@ from googleapiclient.http import MediaIoBaseUpload
 import io
 import requests
 from datetime import date, datetime
-import plotly.express as px  # Library สำหรับทำกราฟสวยๆ
+import plotly.express as px
 
 # ตั้งค่าหน้าเว็บ
 st.set_page_config(page_title="REV.00 UAR System", layout="wide")
@@ -51,7 +51,7 @@ def load_data_df():
         return pd.DataFrame(processed_data, columns=headers)
     return pd.DataFrame(columns=headers)
 
-# --- 2. ฟังก์ชันเสริม (PDF, LINE และ การคำนวณเกรดสี) ---
+# --- 2. ฟังก์ชันเสริม (PDF, LINE, สีเกรด และ กราฟ) ---
 def upload_to_drive(file, filename):
     file_metadata = {'name': filename, 'parents': [DRIVE_FOLDER_ID]}
     media = MediaIoBaseUpload(io.BytesIO(file.getvalue()), mimetype='application/pdf')
@@ -75,26 +75,40 @@ def get_score_grade_html(score):
         val_color = "#dc3545"; grade = "D"; grade_color = "#8b0000"
     return f'<span style="color:{val_color};">{score:.1f}</span> <span style="color:{grade_color}; font-weight:900; font-size:1.1em; margin-left:5px;">{grade}</span>'
 
-# ฟังก์ชันสร้างกราฟแท่ง
 def create_bar_chart(data, model_name, color):
     sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
     model_data = data[data['รุ่น\nModel / モデル'] == model_name]
     
     scores = []
+    cases = []
     for sec in sections:
-        val = model_data[model_data['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
-        scores.append(val)
+        sec_data = model_data[model_data['แผนก\nSection / 部署'] == sec]
+        scores.append(sec_data['Score_Num'].sum())
+        cases.append(len(sec_data)) # นับจำนวนเคส
     
-    chart_df = pd.DataFrame({"แผนก (Section)": sections, "คะแนนรวม (Total Score)": scores})
+    chart_df = pd.DataFrame({
+        "แผนก (Section)": sections, 
+        "คะแนนรวม (Total Score)": scores,
+        "จำนวนเคส (Cases)": cases
+    })
+    
+    # สร้างข้อความโชว์บนกราฟ เช่น "5.0 \n(2 case)"
+    chart_df["Display_Text"] = chart_df.apply(
+        lambda row: f"{row['คะแนนรวม (Total Score)']:.1f}<br>({int(row['จำนวนเคส (Cases)'])} case)", axis=1
+    )
     
     fig = px.bar(
         chart_df, x="แผนก (Section)", y="คะแนนรวม (Total Score)",
-        text="คะแนนรวม (Total Score)",
+        text="Display_Text",
         title=f"สรุปคะแนนรายแผนก: {model_name}",
         color_discrete_sequence=[color]
     )
-    fig.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+    fig.update_traces(texttemplate='%{text}', textposition='outside')
+    
+    # ขยับความสูงกราฟเผื่อข้อความแสดงเคสจะได้ไม่โดนตัด
+    max_score = chart_df["คะแนนรวม (Total Score)"].max()
     fig.update_layout(
+        yaxis_range=[0, max_score * 1.3] if max_score > 0 else [0, 5],
         yaxis=dict(title='คะแนน (Score)'),
         xaxis=dict(title='แผนก (Section)'),
         margin=dict(l=20, r=20, t=40, b=20),
@@ -147,16 +161,20 @@ with tab1:
     st.subheader("🌾 รุ่น Combine")
     combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
     
-    # แสดงกราฟแท่ง Combine
     st.plotly_chart(create_bar_chart(df_filtered, "Combine", "#28a745"), use_container_width=True)
     
     cols = st.columns(len(sections) + 1)
     for i, sec in enumerate(sections):
-        score_sum = combine_df[combine_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
-        cols[i].metric(label=sec, value=f"{score_sum:.1f}")
+        sec_data = combine_df[combine_df['แผนก\nSection / 部署'] == sec]
+        score_sum = sec_data['Score_Num'].sum()
+        cases = len(sec_data)
+        # โชว์จำนวนเคสด้านล่างคะแนน
+        cols[i].metric(label=sec, value=f"{score_sum:.1f}", delta=f"{cases} case", delta_color="off")
+        
     c_total = combine_df['Score_Num'].sum()
+    c_cases = len(combine_df)
     cols[-1].markdown("<div style='font-size:14px; color:#555;'>TOTAL</div>", unsafe_allow_html=True)
-    cols[-1].markdown(f"<h2 style='margin-top:-10px;'>{get_score_grade_html(c_total)}</h2>", unsafe_allow_html=True)
+    cols[-1].markdown(f"<h2 style='margin-top:-10px; padding-top:0;'>{get_score_grade_html(c_total)} <span style='font-size:0.5em; color:gray; font-weight:normal;'>({c_cases} case)</span></h2>", unsafe_allow_html=True)
     
     st.divider()
 
@@ -168,19 +186,22 @@ with tab1:
         st.plotly_chart(create_bar_chart(df_filtered, "Tractor", "#007bff"), use_container_width=True)
         tractor_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Tractor']
         t_total = tractor_df['Score_Num'].sum()
-        st.markdown(f"**คะแนนรวม Tractor:** {get_score_grade_html(t_total)}", unsafe_allow_html=True)
+        t_cases = len(tractor_df)
+        st.markdown(f"**คะแนนรวม Tractor:** {get_score_grade_html(t_total)} <span style='color:gray;'>({t_cases} case)</span>", unsafe_allow_html=True)
 
     with col_right:
         st.markdown("### 🔄 รุ่น Rotary")
         st.plotly_chart(create_bar_chart(df_filtered, "Rotary", "#ffc107"), use_container_width=True)
         rotary_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Rotary']
         r_total = rotary_df['Score_Num'].sum()
-        st.markdown(f"**คะแนนรวม Rotary:** {get_score_grade_html(r_total)}", unsafe_allow_html=True)
+        r_cases = len(rotary_df)
+        st.markdown(f"**คะแนนรวม Rotary:** {get_score_grade_html(r_total)} <span style='color:gray;'>({r_cases} case)</span>", unsafe_allow_html=True)
 
     st.divider()
     other_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Other']
     o_total = other_df['Score_Num'].sum()
-    st.markdown(f"**⚙️ รุ่น Other (TOTAL):** &nbsp;&nbsp; {get_score_grade_html(o_total)}", unsafe_allow_html=True)
+    o_cases = len(other_df)
+    st.markdown(f"**⚙️ รุ่น Other (TOTAL):** &nbsp;&nbsp; {get_score_grade_html(o_total)} <span style='color:gray;'>({o_cases} case)</span>", unsafe_allow_html=True)
 
 # ==========================================
 # TAB 2: บันทึกข้อมูล
