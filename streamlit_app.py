@@ -174,8 +174,7 @@ with tab1:
     c_total = combine_df['Score_Num'].sum()
     c_cases = len(combine_df)
     cols[-1].markdown("<div style='font-size:14px; color:#555;'>TOTAL</div>", unsafe_allow_html=True)
-    cols[-1].markdown(f"<h2 style='margin-top:-10px; padding-top:0;'>{get_score_grade_html(c_total)} <span style='font-size:0.5em; color:gray; font-weight:normal;'>({c_cases} case)</span></h2>", unsafe_allow_html=True)
-    
+    cols[-1].markdown(f"<h2 style='margin-top:-10px; margin-bottom:0px; padding-top:0;'>{get_score_grade_html(c_total)}</h2><div style='color:gray; font-size:14px; margin-top:-5px;'>({c_cases} case)</div>", unsafe_allow_html=True)    
     st.divider()
 
     # --- 🚜 รุ่น Tractor & 🔄 รุ่น Rotary (วางคู่กัน) ---
