@@ -10,7 +10,6 @@ from datetime import date, datetime
 import plotly.express as px
 
 # ตั้งค่าหน้าเว็บ
-st.sidebar.image("https://lh3.googleusercontent.com/d/1zCjSjSbCO-mbsaGoDI6g0G-bfmyVfqFV", use_container_width=True)
 st.set_page_config(page_title="UAR SANSUISHA", layout="wide")
 
 # --- CUSTOM CSS (ตกแต่ง Tabs ให้ดูเป็นมืออาชีพ) ---
