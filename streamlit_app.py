@@ -50,7 +50,7 @@ def load_data_df():
         return pd.DataFrame(processed_data, columns=headers)
     return pd.DataFrame(columns=headers)
 
-# --- 2. ฟังก์ชันเสริม (PDF & LINE) ---
+# --- 2. ฟังก์ชันเสริม (PDF, LINE และ การคำนวณเกรดสี) ---
 def upload_to_drive(file, filename):
     file_metadata = {'name': filename, 'parents': [DRIVE_FOLDER_ID]}
     media = MediaIoBaseUpload(io.BytesIO(file.getvalue()), mimetype='application/pdf')
@@ -62,6 +62,28 @@ def send_line_notify(message):
     token = st.secrets["line"]["token"]
     headers = {'Authorization': f'Bearer {token}'}
     requests.post('https://notify-api.line.me/api/notify', headers=headers, data={'message': message})
+
+def get_score_grade_html(score):
+    """ฟังก์ชันจัดรูปแบบสีและตัวอักษรของคะแนนรวม"""
+    if score == 0.0:
+        val_color = "#28a745" # สีเขียว
+        grade = "A"
+        grade_color = "#28a745" # สีเขียว
+    elif score <= 5.0:
+        val_color = "#28a745" # สีเขียว
+        grade = "B"
+        grade_color = "#28a745" # สีเขียว
+    elif score <= 20.0:
+        val_color = "#dc3545" # สีแดง
+        grade = "C"
+        grade_color = "#dc3545" # สีแดง
+    else:
+        val_color = "#dc3545" # สีแดง
+        grade = "D"
+        grade_color = "#8b0000" # สีแดงเข้ม
+
+    # ส่งกลับเป็นโค้ด HTML เพื่อให้ Streamlit แสดงผลได้
+    return f'<span style="color:{val_color};">{score:.1f}</span> <span style="color:{grade_color}; font-weight:900; font-size:1.1em; margin-left:5px;">{grade}</span>'
 
 # --- 3. หน้าจอการทำงาน ---
 df = load_data_df()
@@ -120,7 +142,10 @@ with tab1:
     for i, sec in enumerate(sections):
         score_sum = combine_df[combine_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
         cols[i].metric(label=sec, value=f"{score_sum:.1f}")
-    cols[-1].metric(label="TOTAL", value=f"{combine_df['Score_Num'].sum():.1f}")
+        
+    c_total = combine_df['Score_Num'].sum()
+    cols[-1].markdown("<div style='font-size:14px; color:#555;'>TOTAL</div>", unsafe_allow_html=True)
+    cols[-1].markdown(f"<h2 style='margin-top:-10px; padding-top:0;'>{get_score_grade_html(c_total)}</h2>", unsafe_allow_html=True)
     
     st.divider()
 
@@ -132,8 +157,10 @@ with tab1:
         s = tractor_df[tractor_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
         t_cols[i].caption(f"**{sec}**")
         t_cols[i].markdown(f"### {s:.1f}")
+        
+    t_total = tractor_df['Score_Num'].sum()
     t_cols[-1].caption("**TOTAL**")
-    t_cols[-1].markdown(f"### {tractor_df['Score_Num'].sum():.1f}")
+    t_cols[-1].markdown(f"### {get_score_grade_html(t_total)}", unsafe_allow_html=True)
 
     st.write("")
 
@@ -145,12 +172,15 @@ with tab1:
         s = rotary_df[rotary_df['แผนก\nSection / 部署'] == sec]['Score_Num'].sum()
         r_cols[i].caption(f"**{sec}**")
         r_cols[i].markdown(f"### {s:.1f}")
+        
+    r_total = rotary_df['Score_Num'].sum()
     r_cols[-1].caption("**TOTAL**")
-    r_cols[-1].markdown(f"### {rotary_df['Score_Num'].sum():.1f}")
+    r_cols[-1].markdown(f"### {get_score_grade_html(r_total)}", unsafe_allow_html=True)
 
     st.divider()
     other_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Other']
-    st.metric(label="⚙️ รุ่น Other", value=f"{other_df['Score_Num'].sum():.1f}")
+    o_total = other_df['Score_Num'].sum()
+    st.markdown(f"**⚙️ รุ่น Other (TOTAL):** &nbsp;&nbsp; {get_score_grade_html(o_total)}", unsafe_allow_html=True)
 
 # ==========================================
 # TAB 2: บันทึกข้อมูล
@@ -224,26 +254,24 @@ with tab2:
                         st.error(f"Error: {e}")
 
 # ==========================================
-# TAB 3: ค้นหาข้อมูล (เพิ่มฟิลเตอร์ & ปุ่มดาวน์โหลด)
+# TAB 3: ค้นหาข้อมูล
 # ==========================================
 with tab3:
     st.header("ฐานข้อมูล UAR ทั้งหมด")
     
     if not df.empty:
-        # แบ่งหน้าจอเป็น 3 คอลัมน์สำหรับกล่องค้นหาและฟิลเตอร์
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
             search_query = st.text_input("🔍 ค้นหาด้วยข้อความ...")
         with f_col2:
             section_list = df['แผนก\nSection / 部署'].dropna().unique().tolist()
-            section_list = [s for s in section_list if str(s).strip() != ""] # กรองช่องว่างออก
+            section_list = [s for s in section_list if str(s).strip() != ""] 
             selected_sections = st.multiselect("🏷️ กรองตามแผนก:", section_list)
         with f_col3:
             model_list = df['รุ่น\nModel / モデル'].dropna().unique().tolist()
-            model_list = [m for m in model_list if str(m).strip() != ""] # กรองช่องว่างออก
+            model_list = [m for m in model_list if str(m).strip() != ""] 
             selected_models = st.multiselect("🚜 กรองตามรุ่น:", model_list)
 
-        # ทำการกรองข้อมูลตามฟิลเตอร์ที่เลือก
         display_df = df.copy()
         
         if selected_sections:
@@ -256,15 +284,12 @@ with tab3:
             mask = display_df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)
             display_df = display_df[mask]
             
-        # เรียงข้อมูลใหม่ล่าสุดขึ้นก่อน
         display_df = display_df.sort_index(ascending=False)
         
-        # จัดเลย์เอาต์ปุ่มดาวน์โหลดและจำนวนรายการ
         d_col1, d_col2 = st.columns([1, 2])
         with d_col1:
             st.markdown(f"**จำนวนผลลัพธ์:** {len(display_df)} รายการ")
         with d_col2:
-            # แปลง DataFrame เป็นไฟล์ CSV (รองรับภาษาไทย/ญี่ปุ่นด้วย utf-8-sig)
             csv = display_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
             st.download_button(
                 label="📥 ดาวน์โหลดเป็นไฟล์ Excel (CSV)",
@@ -274,7 +299,6 @@ with tab3:
                 use_container_width=True
             )
 
-        # แสดงตาราง
         st.dataframe(
             display_df, 
             use_container_width=True, 
