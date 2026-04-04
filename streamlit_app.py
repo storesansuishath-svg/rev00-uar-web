@@ -10,8 +10,18 @@ from datetime import date, datetime
 import plotly.express as px
 
 # ตั้งค่าหน้าเว็บ
-st.set_page_config(page_title="REV.00 UAR System", layout="wide")
-st.title("📂 ระบบ รวม UAR")
+st.set_page_config(page_title="UAR SANSUISHA", layout="wide")
+
+# --- ส่วนหัวของเว็บ (Header & Logo) โฉมใหม่ ---
+st.markdown("""
+    <div style="display: flex; align-items: center; padding: 15px 25px; background-color: rgba(0, 86, 179, 0.05); border-radius: 12px; border-left: 8px solid #0056b3; margin-bottom: 25px;">
+        <img src="https://drive.google.com/uc?export=view&id=1zCjSjSbCO-mbsaGoDI6g0G-bfmyVfqFV" style="height: 60px; margin-right: 25px; object-fit: contain;" alt="SANSUISHA Logo">
+        <div>
+            <h1 style="margin: 0; font-size: 38px; font-weight: 900; color: #0056b3; line-height: 1.2;">UAR SANSUISHA</h1>
+            <span style="color: #666; font-size: 15px; font-weight: 500;">Quality Assurance & Problem Tracking System</span>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
 
 # --- 1. การเชื่อมต่อ Google Services ---
 @st.cache_resource
@@ -84,7 +94,7 @@ def create_bar_chart(data, model_name, color):
     for sec in sections:
         sec_data = model_data[model_data['แผนก\nSection / 部署'] == sec]
         scores.append(sec_data['Score_Num'].sum())
-        cases.append(len(sec_data)) # นับจำนวนเคส
+        cases.append(len(sec_data)) 
     
     chart_df = pd.DataFrame({
         "แผนก (Section)": sections, 
@@ -92,7 +102,6 @@ def create_bar_chart(data, model_name, color):
         "จำนวนเคส (Cases)": cases
     })
     
-    # สร้างข้อความโชว์บนกราฟ เช่น "5.0 \n(2 case)"
     chart_df["Display_Text"] = chart_df.apply(
         lambda row: f"{row['คะแนนรวม (Total Score)']:.1f}<br>({int(row['จำนวนเคส (Cases)'])} case)", axis=1
     )
@@ -105,7 +114,6 @@ def create_bar_chart(data, model_name, color):
     )
     fig.update_traces(texttemplate='%{text}', textposition='outside')
     
-    # ขยับความสูงกราฟเผื่อข้อความแสดงเคสจะได้ไม่โดนตัด
     max_score = chart_df["คะแนนรวม (Total Score)"].max()
     fig.update_layout(
         yaxis_range=[0, max_score * 1.3] if max_score > 0 else [0, 5],
@@ -147,10 +155,11 @@ with tab1:
     month_list = sorted(month_list, key=lambda x: datetime.strptime(x, '%m/%Y'), reverse=True)
     selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการตรวจสอบ (Select Month):", month_list, index=month_list.index(current_month_str))
 
+    # กล่องแสดงเดือนสีฟ้าแบบ Professional
     st.markdown(f"""
-        <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; border-left: 8px solid #007bff; margin-bottom:20px;">
+        <div style="background-color:#e9f2fb; padding:20px; border-radius:10px; border-left: 8px solid #0056b3; margin-bottom:20px;">
             <h1 style="margin:0; color:#1f1f1f; font-size:40px;">📅 ประจำเดือน: {selected_month}</h1>
-            <p style="margin:0; color:#666;">สรุปผลคะแนน UAR/PAR แยกตามแผนก</p>
+            <p style="margin:0; color:#555;">สรุปผลคะแนน UAR/PAR แยกตามแผนก</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -168,13 +177,15 @@ with tab1:
         sec_data = combine_df[combine_df['แผนก\nSection / 部署'] == sec]
         score_sum = sec_data['Score_Num'].sum()
         cases = len(sec_data)
-        # โชว์จำนวนเคสด้านล่างคะแนน
         cols[i].metric(label=sec, value=f"{score_sum:.1f}", delta=f"{cases} case", delta_color="off")
         
     c_total = combine_df['Score_Num'].sum()
     c_cases = len(combine_df)
+    
+    # [แก้ไขให้ข้อความเคสตกมาอยู่บรรทัดล่างเรียบร้อยแล้ว]
     cols[-1].markdown("<div style='font-size:14px; color:#555;'>TOTAL</div>", unsafe_allow_html=True)
-    cols[-1].markdown(f"<h2 style='margin-top:-10px; margin-bottom:0px; padding-top:0;'>{get_score_grade_html(c_total)}</h2><div style='color:gray; font-size:14px; margin-top:-5px;'>({c_cases} case)</div>", unsafe_allow_html=True)    
+    cols[-1].markdown(f"<h2 style='margin-top:-10px; margin-bottom:0px; padding-top:0;'>{get_score_grade_html(c_total)}</h2><div style='color:gray; font-size:14px; margin-top:-5px;'>({c_cases} case)</div>", unsafe_allow_html=True)
+    
     st.divider()
 
     # --- 🚜 รุ่น Tractor & 🔄 รุ่น Rotary (วางคู่กัน) ---
