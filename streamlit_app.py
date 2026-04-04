@@ -34,7 +34,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- ส่วนหัวของเว็บ (Header & Logo) ---
-col_logo, col_title = st.columns([3, 8])
+col_logo, col_title = st.columns([5, 8])
 with col_logo:
     # ⬇️ บรรทัดใส่ Logo อยู่ตรงนี้ครับ ⬇️
     st.image("https://lh3.googleusercontent.com/d/1zCjSjSbCO-mbsaGoDI6g0G-bfmyVfqFV", width=200)
