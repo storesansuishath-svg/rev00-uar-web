@@ -37,7 +37,7 @@ st.markdown("""
 col_logo, col_title = st.columns([3, 8])
 with col_logo:
     # ⬇️ บรรทัดใส่ Logo อยู่ตรงนี้ครับ ⬇️
-    st.image("https://lh3.googleusercontent.com/d/1zCjSjSbCO-mbsaGoDI6g0G-bfmyVfqFV", width=200))
+    st.image("https://lh3.googleusercontent.com/d/1zCjSjSbCO-mbsaGoDI6g0G-bfmyVfqFV", width=200)
     # ⬆️ บรรทัดใส่ Logo อยู่ตรงนี้ครับ ⬆️
     
 with col_title:
