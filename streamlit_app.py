@@ -167,6 +167,9 @@ with tab1:
     today = date.today()
     current_month_str = today.strftime('%m/%Y')
     df_dash = df.copy()
+    # 📌 ล้างเว้นวรรคส่วนเกินที่คนอาจจะเผลอพิมพ์ผิด เพื่อป้องกันข้อมูลหาย
+    df_dash['รุ่น\nModel / モデル'] = df_dash['รุ่น\nModel / モデル'].astype(str).str.strip()
+    df_dash['แผนก\nSection / 部署'] = df_dash['แผนก\nSection / 部署'].astype(str).str.strip()
     
     date_strs = df_dash['วันที่\nDate / 日付'].astype(str).str.strip()
     df_dash['Date_Parsed'] = pd.to_datetime(date_strs, errors='coerce', dayfirst=True)
