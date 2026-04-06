@@ -170,6 +170,7 @@ with tab1:
     current_month_str = today.strftime('%m/%Y')
     df_dash = df.copy()
     
+    # เตรียมข้อมูล
     date_strs = df_dash['วันที่\nDate / 日付'].astype(str).str.strip()
     df_dash['Date_Parsed'] = pd.to_datetime(date_strs, errors='coerce', dayfirst=True)
     df_dash['Score_Num'] = pd.to_numeric(df_dash['คะแนน\nScore / สコア'], errors='coerce').fillna(0.0)
@@ -177,83 +178,96 @@ with tab1:
     valid_dates_df = df_dash.dropna(subset=['Date_Parsed']).copy()
     valid_dates_df['Month_Year'] = valid_dates_df['Date_Parsed'].dt.strftime('%m/%Y')
     
-    month_list = list(valid_dates_df['Month_Year'].unique())
-    if current_month_str not in month_list:
-        month_list.append(current_month_str)
+    month_list = sorted(list(valid_dates_df['Month_Year'].unique()), 
+                       key=lambda x: datetime.strptime(x, '%m/%Y'), reverse=True)
     
-    month_list = sorted(month_list, key=lambda x: datetime.strptime(x, '%m/%Y'), reverse=True)
-    selected_month = st.selectbox("📅 เลือกเดือนที่ต้องการตรวจสอบ (Select Month):", month_list, index=month_list.index(current_month_str))
+    # ส่วนหัวและตัวเลือก
+    col_sel1, col_sel2 = st.columns([1, 1])
+    with col_sel1:
+        selected_month = st.selectbox("📅 เลือกเดือน (Select Month):", month_list)
+    with col_sel2:
+        # 📌 เพิ่มฟิลเตอร์แยก UAR / PAR
+        view_mode = st.radio("🔍 รูปแบบการแสดงผล:", ["ทั้งหมด (All)", "เฉพาะ UAR (Score > 0)", "เฉพาะ PAR (Score = 0)"], horizontal=True)
 
-    # กล่องแสดงเดือน
+    # กล่องแสดงนิยามและเดือน (เน้น UAR/PAR ให้ Khun Kato เห็นชัดๆ)
     st.markdown(f"""
         <div style="background-color:#e9f2fb; padding:20px; border-radius:10px; border-left: 8px solid #0056b3; margin-bottom:20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-            <h1 style="margin:0; color:#1f1f1f; font-size:25px;">ประจำเดือน/Month: {selected_month}</h1>
-            <p style="margin:0; color:#555;">สรุปผลคะแนน UAR/PAR แยกตามแผนก</p>
+            <div style="float:right; text-align:right;">
+                <span style="background-color:#dc3545; color:white; padding:2px 8px; border-radius:4px; font-size:12px;">UAR: หักคะแนน</span>
+                <span style="background-color:#28a745; color:white; padding:2px 8px; border-radius:4px; font-size:12px; margin-left:5px;">PAR: 0 คะแนน</span>
+            </div>
+            <h1 style="margin:0; color:#1f1f1f; font-size:32px;">📅 ประจำเดือน: {selected_month}</h1>
+            <p style="margin:0; color:#555;">สรุปสถานะคุณภาพแยกตามแผนกและประเภทรายการ</p>
         </div>
     """, unsafe_allow_html=True)
 
+    # กรองข้อมูลตามเดือนและโหมดที่เลือก
     df_filtered = valid_dates_df[valid_dates_df['Month_Year'] == selected_month]
+    
+    if view_mode == "เฉพาะ UAR (Score > 0)":
+        df_filtered = df_filtered[df_filtered['Score_Num'] > 0]
+    elif view_mode == "เฉพาะ PAR (Score = 0)":
+        df_filtered = df_filtered[df_filtered['Score_Num'] == 0]
+
     sections = ["PD1-A", "PD1-B", "ASSY", "MS-1", "MS-2", "Delivery"]
 
-    # --- 🌾 รุ่น Combine (ใหญ่สุด) ---
+    # ฟังก์ชันช่วยคำนวณเคส UAR/PAR แยกกัน
+    def get_uar_par_info(data):
+        uar_cases = len(data[data['Score_Num'] > 0])
+        par_cases = len(data[data['Score_Num'] == 0])
+        total_score = data['Score_Num'].sum()
+        return total_score, uar_cases, par_cases
+
+    # --- 🌾 รุ่น Combine ---
     st.markdown("""
-        <div style="background-color: #f0fdf4; border-left: 6px solid #28a745; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-            <h2 style="margin:0; color: #15803d;">🌾 รุ่น Combine</h2>
+        <div style="background-color: #f0fdf4; border-left: 6px solid #28a745; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h3 style="margin:0; color: #15803d;">🌾 รุ่น Combine</h3>
         </div>
     """, unsafe_allow_html=True)
     
-    combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
     st.plotly_chart(create_bar_chart(df_filtered, "Combine", "#28a745"), use_container_width=True)
     
+    combine_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Combine']
     cols = st.columns(len(sections) + 1)
+    
     for i, sec in enumerate(sections):
         sec_data = combine_df[combine_df['แผนก\nSection / 部署'] == sec]
-        score_sum = sec_data['Score_Num'].sum()
-        cases = len(sec_data)
-        cols[i].metric(label=sec, value=f"{score_sum:.1f}", delta=f"{cases} case", delta_color="off")
+        s_sum, u_case, p_case = get_uar_par_info(sec_data)
+        # โชว์ Score และแยก UAR/PAR case
+        cols[i].metric(label=sec, value=f"{s_sum:.1f}", delta=f"U:{u_case} | P:{p_case}", delta_color="off")
         
-    c_total = combine_df['Score_Num'].sum()
-    c_cases = len(combine_df)
-    
-    cols[-1].markdown("<div style='font-size:14px; color:#555;'>TOTAL</div>", unsafe_allow_html=True)
-    cols[-1].markdown(f"<h2 style='margin-top:-10px; margin-bottom:0px; padding-top:0;'>{get_score_grade_html(c_total)}</h2><div style='color:gray; font-size:14px; margin-top:-5px;'>({c_cases} case)</div>", unsafe_allow_html=True)
+    c_score, c_u, c_p = get_uar_par_info(combine_df)
+    cols[-1].markdown("<div style='font-size:12px; color:#555; font-weight:bold;'>TOTAL</div>", unsafe_allow_html=True)
+    cols[-1].markdown(f"""
+        <div style='margin-top:-5px;'>
+            <h3 style='margin:0;'>{get_score_grade_html(c_score)}</h3>
+            <div style='font-size:12px; color:gray;'>UAR: {c_u} | PAR: {c_p}</div>
+        </div>
+    """, unsafe_allow_html=True)
     
     st.divider()
 
-    # --- 🚜 รุ่น Tractor & 🔄 รุ่น Rotary (วางคู่กัน) ---
+    # --- 🚜 รุ่น Tractor & 🔄 รุ่น Rotary ---
     col_left, col_right = st.columns(2)
     
     with col_left:
-        st.markdown("""
-            <div style="background-color: #eff6ff; border-left: 6px solid #007bff; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                <h3 style="margin:0; color: #0056b3;">🚜 รุ่น Tractor</h3>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown("<div style='background-color:#eff6ff; border-left:5px solid #007bff; padding:10px; border-radius:5px;'><b>🚜 รุ่น Tractor</b></div>", unsafe_allow_html=True)
         st.plotly_chart(create_bar_chart(df_filtered, "Tractor", "#007bff"), use_container_width=True)
-        tractor_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Tractor']
-        t_total = tractor_df['Score_Num'].sum()
-        t_cases = len(tractor_df)
-        st.markdown(f"**คะแนนรวม Tractor:** &nbsp; {get_score_grade_html(t_total)} <span style='color:gray;'>({t_cases} case)</span>", unsafe_allow_html=True)
+        t_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Tractor']
+        ts, tu, tp = get_uar_par_info(t_df)
+        st.markdown(f"**Score:** {get_score_grade_html(ts)} &nbsp;&nbsp; <span style='color:gray;'>(UAR: {tu} | PAR: {tp})</span>", unsafe_allow_html=True)
 
     with col_right:
-        st.markdown("""
-            <div style="background-color: #fffdf0; border-left: 6px solid #ffc107; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                <h3 style="margin:0; color: #b38600;">🔄 รุ่น Rotary</h3>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown("<div style='background-color:#fffdf0; border-left:5px solid #ffc107; padding:10px; border-radius:5px;'><b>🔄 รุ่น Rotary</b></div>", unsafe_allow_html=True)
         st.plotly_chart(create_bar_chart(df_filtered, "Rotary", "#ffc107"), use_container_width=True)
-        rotary_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Rotary']
-        r_total = rotary_df['Score_Num'].sum()
-        r_cases = len(rotary_df)
-        st.markdown(f"**คะแนนรวม Rotary:** &nbsp; {get_score_grade_html(r_total)} <span style='color:gray;'>({r_cases} case)</span>", unsafe_allow_html=True)
+        r_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Rotary']
+        rs, ru, rp = get_uar_par_info(r_df)
+        st.markdown(f"**Score:** {get_score_grade_html(rs)} &nbsp;&nbsp; <span style='color:gray;'>(UAR: {ru} | PAR: {rp})</span>", unsafe_allow_html=True)
 
     st.divider()
-    
     other_df = df_filtered[df_filtered['รุ่น\nModel / モデル'] == 'Other']
-    o_total = other_df['Score_Num'].sum()
-    o_cases = len(other_df)
-    st.markdown(f"**⚙️ รุ่น Other (TOTAL):** &nbsp;&nbsp; {get_score_grade_html(o_total)} <span style='color:gray;'>({o_cases} case)</span>", unsafe_allow_html=True)
-
+    os, ou, op = get_uar_par_info(other_df)
+    st.markdown(f"**⚙️ รุ่น Other (TOTAL):** &nbsp;&nbsp; {get_score_grade_html(os)} &nbsp;&nbsp; <span style='color:gray;'>(UAR: {ou} | PAR: {op})</span>", unsafe_allow_html=True)
 # ==========================================
 # TAB 2: บันทึกข้อมูล
 # ==========================================
